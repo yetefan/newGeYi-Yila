@@ -225,7 +225,9 @@ class SessionScheduler:
             while True:
                 with self._lock:
                     if not state.pending:
-                        state.worker_active = False
+                        # 标记只在循环末尾的 finally 里改。这里提前清掉的话，
+                        # return 和 finally 之间进来的新消息会自己再起一个 drain，
+                        # 同一会话就会有两个任务同时跑。
                         return
                     msg, kind = state.pending[0]
                     # 每起步一条任务就算一次「有进展」，看门狗据此判断死活
@@ -242,12 +244,11 @@ class SessionScheduler:
                             self.runtime.store.add_turn(
                                 msg.session.as_text(), 'user', msg.text, msg.sender_id, msg.sender_name
                             )
-                        except Exception:
-                            pass
+                        except Exception:  # noqa: BLE001 - 补写失败不能中断这个会话
+                            logger.exception('被取代的私聊消息没能写入历史 | %s', key[-24:])
                     continue
                 with self._lock:
                     if not state.pending:
-                        state.worker_active = False
                         return
                     msg, kind = state.pending.popleft()
                 try:
@@ -264,10 +265,11 @@ class SessionScheduler:
                     logger.exception('会话任务失败（kind=%s）| %s', kind, key[-24:])
         finally:
             # 注意：finally 里**不能 return**，否则会把正在冒泡的异常吞掉（原来是这个写法）
+            # 标记和积压必须同一次加锁判断：有积压就保持占用并只在这里重开，
+            # 不能先放标记再重开，否则 submit 会同时再开一个 drain。
             with self._lock:
                 remaining = len(state.pending)
-                if not remaining:
-                    state.worker_active = False
+                state.worker_active = bool(remaining)
             if remaining:
                 # 还有积压：必须重新起一个 drain，否则这个会话就哑了
                 logger.warning('drain 退出时仍有 %d 条积压，重新排队 | %s',
@@ -276,7 +278,7 @@ class SessionScheduler:
 
     # ---------- 诊断 ----------
     def pending_snapshot(self) -> dict:
-        """给「歌伊状态」用：现在有多少条任务在排队、worker 标记是否还挂着。"""
+        """给「伊菈状态」用：现在有多少条任务在排队、worker 标记是否还挂着。"""
         with self._lock:
             busy = {key: len(st.pending) for key, st in self._states.items() if st.pending}
             workers = sum(1 for st in self._states.values() if st.worker_active)

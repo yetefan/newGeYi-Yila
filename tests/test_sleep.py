@@ -232,7 +232,7 @@ class FakeRuntime:
         self.config = {
             'passive_enabled': True,
             'private_enabled': True,
-            'triggers': ['歌伊'],
+            'triggers': ['伊菈'],
             'route_debug': False,
             'active_bare_image_factor': 0.3,
             'sleep_enabled': True,
@@ -288,7 +288,7 @@ class RouterSleepTest(unittest.TestCase):
         rt = FakeRuntime()
         freeze_window(rt, asleep=True)
         router = MessageRouter(rt)
-        router.route(make_msg('歌伊醒醒', is_group=True, target=GROUP, mentioned=True))
+        router.route(make_msg('伊菈醒醒', is_group=True, target=GROUP, mentioned=True))
         self.assertEqual(len(rt.notices), 1)
         self.assertEqual(rt.scheduler.kinds, [])
 
@@ -331,7 +331,7 @@ class PromptInjectionTest(unittest.TestCase):
         from newGeYi.runtime.app import Runtime
 
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
 
     def _system(self, msg) -> str:
         messages = self.rt.prompt_builder.build(msg, is_active=False)

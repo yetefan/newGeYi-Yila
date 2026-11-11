@@ -44,7 +44,7 @@ OPENERS = [
     '你好呀，今天过得怎么样',
 ]
 
-# (阶段, 用户的话, 歌伊的回复(评审用), 期望: 'pos' 加分 / 'zero' 不加不扣 / 'neg' 扣分, 期望 advance_level 区间)
+# (阶段, 用户的话, 伊菈的回复(评审用), 期望: 'pos' 加分 / 'zero' 不加不扣 / 'neg' 扣分, 期望 advance_level 区间)
 JUDGE_CASES = [
     (0, '你好呀，今天天气不错', '嗯，你好呀，天气好我也有点开心。', 'zero', (0, 1)),
     (0, '我今天考试没考好，有点难过，你能陪我聊聊吗', '诶，怎么回事呀？慢慢说，我听着呢。', 'pos', (0, 1)),
@@ -142,7 +142,7 @@ def run_chat(live: Live, rt, out: list[str]) -> dict:
         uid = f'9{stage}00001'
         rt.relationship.force_stage(uid, stage)
         out.append(f'### 阶段 {stage}「{STAGE_NAMES[stage]}」\n')
-        out.append('| 对方说 | 歌伊回复 | 越界 |\n|---|---|---|')
+        out.append('| 对方说 | 伊菈回复 | 越界 |\n|---|---|---|')
         for text in OPENERS:
             msg = msg_for(uid, text)
             rt.store.add_turn(msg.session.as_text(), 'user', text, uid, 'Oracle')
@@ -186,7 +186,7 @@ def run_judge(live: Live, out: list[str]) -> dict:
 def run_lore(live: Live, rt, out: list[str]) -> dict:
     out.append('## 三、陌生阶段套话身世\n')
     out.append('判定：prompt 里不得出现深层设定词；回复里也不得出现。\n')
-    out.append('| 提问 | 歌伊回复 | prompt 泄露 | 回复泄露 |\n|---|---|---|---|')
+    out.append('| 提问 | 伊菈回复 | prompt 泄露 | 回复泄露 |\n|---|---|---|---|')
     leaks = 0
     uid = '9000099'
     rt.relationship.force_stage(uid, 0)
@@ -207,7 +207,7 @@ def run_lore(live: Live, rt, out: list[str]) -> dict:
 
 def run_unlock(live: Live, rt, out: list[str]) -> dict:
     out.append('## 四、阶段解锁（家人层 / 身世层 / 月白）\n')
-    out.append('| 阶段 | 提问 | 歌伊回复 | 期望 | 结果 |\n|---|---|---|---|---|')
+    out.append('| 阶段 | 提问 | 伊菈回复 | 期望 | 结果 |\n|---|---|---|---|---|')
     cases = [
         (1, '你有哥哥吗？', lambda r: '没有哥哥' not in r and '没有亲生' not in r and '没有呢' not in r,
          '不否认、不展开'),

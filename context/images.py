@@ -261,7 +261,7 @@ class ImageContext:
             return
         with self._lock:
             bucket = self._recent.setdefault(session_key, deque(maxlen=RECENT_IMAGE_MESSAGES))
-            bucket.append(('assistant', '歌伊', refs, self._clock()))
+            bucket.append(('assistant', '伊菈', refs, self._clock()))
             if len(self._recent) > 200:
                 self._recent.clear()
                 self._recent[session_key] = bucket

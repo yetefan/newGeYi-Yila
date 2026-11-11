@@ -39,7 +39,7 @@ _BRIDGE_HEADER = 'X-Geyi-Panel'     # 自定义头 → 跨域 POST 必须先过�
 _HOST_HTML = r'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>歌伊调试台</title>
+<title>伊菈调试台</title>
 <style>
 html,body{height:100%;margin:0;background:#0f1115;color:#e7e9ee;font:14px/1.5 system-ui,sans-serif}
 header{position:fixed;inset:0 0 auto 0;height:34px;display:flex;align-items:center;gap:10px;
@@ -53,7 +53,7 @@ a{color:#7cc4ff}
 <body>
 <header><span id="dot"></span><span id="state">正在连接本机 Python 面板…</span>
 <span id="where">127.0.0.1 本地面板 · 非 OlivOS WebUI</span></header>
-<iframe id="panel" title="歌伊调试台" src="./page"></iframe>
+<iframe id="panel" title="伊菈调试台" src="./page"></iframe>
 <script>
 'use strict';
 const frame = document.getElementById('panel');
@@ -327,7 +327,7 @@ class LocalPanelServer:
         self._thread = threading.Thread(target=httpd.serve_forever, name='geyi-panel', daemon=True)
         self._thread.start()
         self._url = 'http://%s:%d/p/%s/' % (HOST, httpd.server_address[1], self.token)
-        logger.info('本地面板已启动：%s （只监听 127.0.0.1；QQ 里发「面板地址」可再取一次）', self._url)
+        logger.info('本地面板已启动：%s （只监听 127.0.0.1；QQ 里发「伊菈面板」可再取一次）', self._url)
         return self._url
 
     def stop(self) -> None:

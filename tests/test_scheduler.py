@@ -183,6 +183,40 @@ class WedgedQueueTest(unittest.TestCase):
         sch.shutdown()
 
 
+class SameSessionOverlapTest(unittest.TestCase):
+    """同一会话不能同时跑两个任务，否则回复会乱序。"""
+
+    def test_concurrent_submits_stay_single_file(self):
+        active = {'n': 0, 'max': 0}
+        counter = threading.Lock()
+
+        class OverlapRuntime(FakeRuntime):
+            def process_job(self, msg, kind):
+                with counter:
+                    active['n'] += 1
+                    active['max'] = max(active['max'], active['n'])
+                time.sleep(0.01)
+                with counter:
+                    active['n'] -= 1
+                super().process_job(msg, kind)
+
+        rt = OverlapRuntime({'max_pending_per_session': 80, 'incomplete_hold_seconds': 0})
+        sch = SessionScheduler(rt, max_workers=8)
+        try:
+            def send(i):
+                sch.submit(make_msg('第%d条' % i), 'passive')
+
+            threads = [threading.Thread(target=send, args=(i,)) for i in range(40)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            self.assertTrue(wait_for(lambda: len(rt.processed) == 40, timeout=8))
+            self.assertEqual(active['max'], 1, '同一会话出现了并行任务')
+        finally:
+            sch.shutdown()
+
+
 class LogBridgeTest(unittest.TestCase):
     """日志桥：所有级别都必须落到 `Proc.log(2, …)`，否则线上一条都看不见。"""
 

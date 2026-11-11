@@ -27,8 +27,8 @@ from newGeYi.storage.database import (  # noqa: E402
 
 class VideoNoiseTest(unittest.TestCase):
     def test_bv_only_message_is_dropped_as_pure_share(self):
-        # "歌伊看看BV1xx"：去掉编号后只剩「歌伊看看」这种指令词 → 整条不记（本来也没信息量）
-        text, pure = clean_video_noise('歌伊看看BV1cPuAzDEZP')
+        # "伊菈看看BV1xx"：去掉编号后只剩「伊菈看看」这种指令词 → 整条不记（本来也没信息量）
+        text, pure = clean_video_noise('伊菈看看BV1cPuAzDEZP')
         self.assertTrue(pure)
         self.assertEqual(text, '')
 
@@ -39,7 +39,7 @@ class VideoNoiseTest(unittest.TestCase):
             self.assertEqual(text, '')
 
     def test_link_with_no_content_is_dropped(self):
-        text, pure = clean_video_noise('歌伊快看这个 https://b23.tv/abcDEF12')
+        text, pure = clean_video_noise('伊菈快看这个 https://b23.tv/abcDEF12')
         self.assertTrue(pure, '去掉指令词和链接后没有实质内容，应整条丢弃')
         self.assertEqual(text, '')
 
@@ -118,7 +118,7 @@ class VideoShareCapTest(unittest.TestCase):
 
     def test_video_facts_are_capped_regardless_of_total(self):
         for i in range(5):
-            self._add('向歌伊安利了B站视频《第%d弹》' % i, category='bili_share', source='explicit')
+            self._add('向伊菈安利了B站视频《第%d弹》' % i, category='bili_share', source='explicit')
         # 总量远没到上限，但视频要单独封顶到 3 条
         removed = self.store.trim_user_facts(self.sk, self.uid, max_per_user=50,
                                              max_per_group=0, video_share_keep=3)
@@ -144,7 +144,7 @@ class CuratorKeywordFlowTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix='geyi_kw_flow_')
         self.store = SQLiteStore(os.path.join(self.tmp, 'flow.sqlite3'))
         self.store.set_setting('facts.keywords_cleanup', '1')
-        self.config = {'assistant_name': '歌伊', 'memory_max_facts_per_user': 50,
+        self.config = {'assistant_name': '伊菈', 'memory_max_facts_per_user': 50,
                        'memory_max_facts_per_group': 3000, 'memory_video_share_keep': 3,
                        'memory_cross_group_enabled': True}
         self.curator = MemoryCurator(self.config, self.store, None)
@@ -176,7 +176,7 @@ class BufferVideoSkipTest(unittest.TestCase):
         from newGeYi.memory.curator import MemoryCurator
         self.tmp = tempfile.mkdtemp(prefix='geyi_kw_buf_')
         self.store = SQLiteStore(os.path.join(self.tmp, 'buf.sqlite3'))
-        self.curator = MemoryCurator({'assistant_name': '歌伊'}, self.store, None)
+        self.curator = MemoryCurator({'assistant_name': '伊菈'}, self.store, None)
 
     def tearDown(self):
         self.store.close()

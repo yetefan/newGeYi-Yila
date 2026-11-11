@@ -304,7 +304,7 @@ class ServiceTest(unittest.TestCase):
         self.rt = Runtime()
         self.rt.config.update({'galgame_enabled': True, 'galgame_shadow': False,
                                'worldbook_enabled': True, 'galgame_owner_exempt': True})
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，测试人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，测试人设。')
         self.svc = self.rt.relationship
         self.svc.worldbook = self.rt.worldbook = self.rt.prompt_builder.worldbook = _wb([
             {'id': 'secret', 'keywords': ['哥哥'], 'content': '哥哥在村子出事那天失踪了。',

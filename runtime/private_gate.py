@@ -22,6 +22,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 
 from . import sponsors
@@ -39,6 +40,8 @@ class PrivateGate:
     def __init__(self, store, config: dict):
         self.store = store
         self.config = config
+        # 检查和记账必须串起来：两个请求同时读到同一个次数，限额就会被多放行。
+        self._lock = threading.RLock()
 
     # ---------- 配置读取（都允许脏值） ----------
     def _num(self, key: str, default: float) -> float:
@@ -108,6 +111,10 @@ class PrivateGate:
     # ---------- 判断 ----------
     def allow(self, msg) -> tuple[bool, str]:
         """能不能为这条私聊消息排一次回复。返回 (放行, 原因码)。"""
+        with self._lock:
+            return self._allow_locked(msg)
+
+    def _allow_locked(self, msg) -> tuple[bool, str]:
         session_key = msg.session.as_text()
 
         # ① 触发词模式：没叫她就只当没看见（消息仍会进记忆缓冲，她知道你在说啥）
@@ -188,6 +195,10 @@ class PrivateGate:
 
     def commit(self, session_key: str) -> None:
         """真正排进队列之后才记账（提交失败不扣额度）。"""
+        with self._lock:
+            self._commit_locked(session_key)
+
+    def _commit_locked(self, session_key: str) -> None:
         now = time.time()
         try:
             self.store.set_setting(self._key('last', session_key), str(now))

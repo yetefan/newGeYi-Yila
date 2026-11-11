@@ -13,6 +13,7 @@ from __future__ import annotations
 import itertools
 import os
 import tempfile
+import threading
 import time
 import types
 import unittest
@@ -27,8 +28,8 @@ from newGeYi.storage.database import SQLiteStore  # noqa: E402
 _SEQ = itertools.count(3100001)
 
 BASE_CFG = {
-    'triggers': ['歌伊'],
-    'assistant_name': '歌伊',
+    'triggers': ['伊菈'],
+    'assistant_name': '伊菈',
     'private_trigger_extra': [],
     'private_trigger_only': False,
     'private_min_interval': 0,
@@ -72,7 +73,7 @@ class PrivateGateTest(unittest.TestCase):
 
     def test_trigger_only_passes_on_keyword(self):
         self.config['private_trigger_only'] = True
-        self.assertEqual(self.gate.allow(make_private_msg('1111', '歌伊在吗')), (True, ''))
+        self.assertEqual(self.gate.allow(make_private_msg('1111', '伊菈在吗')), (True, ''))
 
     def test_extra_keywords_work(self):
         self.config['private_trigger_only'] = True
@@ -219,6 +220,24 @@ class PrivateGateTest(unittest.TestCase):
             self.assertEqual(self.gate.sponsor_ids(), set(), f'{bad!r} 应被忽略')
             self.assertFalse(self.gate.is_sponsor('8888'))
 
+    def test_concurrent_commits_do_not_lose_counts(self):
+        """多个请求同时记账时，全局次数不能少。"""
+        errors = []
+
+        def once(i):
+            try:
+                self.gate.commit(make_private_msg('%d' % i).session.as_text())
+            except Exception as exc:  # noqa: BLE001 - 断言放在主线程
+                errors.append(exc)
+
+        threads = [threading.Thread(target=once, args=(i,)) for i in range(20)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        self.assertEqual(errors, [])
+        self.assertEqual(self.gate.used_today_global(), 20)
+
     def test_sponsor_usage_text_marks_sponsor(self):
         self.config.update({'private_daily_quota': 60,
                             'private_daily_quota_sponsor': 120,
@@ -234,7 +253,7 @@ class PrivateGateRoutingTest(unittest.TestCase):
     def setUp(self):
         from newGeYi.runtime.app import Runtime
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
         self.rt.config['private_enabled'] = True      # 私聊总开关（默认是关的）
         # ⚠️ 整个测试进程共用一个数据目录，上一轮跑留下的 priv.last/priv.gday 会串进来。
         # 这里把间隔和额度显式归零，用例只测自己想测的那一条。
@@ -256,7 +275,7 @@ class PrivateGateRoutingTest(unittest.TestCase):
         self.rt.config['private_trigger_only'] = True
         self._route('今天好累')
         self.assertEqual(self.submitted, [])
-        self._route('歌伊在吗')
+        self._route('伊菈在吗')
         self.assertEqual(self.submitted, ['passive'])
 
     def test_daily_quota_stops_submitting(self):
@@ -275,12 +294,35 @@ class PrivateGateRoutingTest(unittest.TestCase):
                              session_type='group', host_id='-', target_id='700111')
         msg = IncomingMessage(
             session=session, message_id='1', sender_id='900111', sender_name='测试',
-            text='歌伊在吗', raw_text='歌伊在吗', is_group=True, mentioned_bot=False,
+            text='伊菈在吗', raw_text='伊菈在吗', is_group=True, mentioned_bot=False,
             event=types.SimpleNamespace(send=lambda *a, **k: None), proc=None,
             arrival_seq=1, sender_is_bot=False,
         )
         MessageRouter(self.rt).route(msg)
         self.assertEqual(len(self.submitted), 1, '群聊不该被私聊闸门影响')
+
+
+class TurnSequenceTest(unittest.TestCase):
+    """并发写入同一会话时，序号必须连续且不重复。"""
+
+    def test_parallel_turns_get_distinct_sequences(self):
+        tmp = tempfile.mkdtemp(prefix='geyi_turn_seq_')
+        store = SQLiteStore(os.path.join(tmp, 'turns.sqlite3'))
+        try:
+            def write(i):
+                store.add_turn('same-session', 'user', '第%d句' % i, str(i), '测试')
+
+            threads = [threading.Thread(target=write, args=(i,)) for i in range(30)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+            rows = store._conn().execute(
+                'SELECT seq FROM turns WHERE session_key=? ORDER BY seq', ('same-session',)
+            ).fetchall()
+            self.assertEqual([row[0] for row in rows], list(range(1, 31)))
+        finally:
+            store.close()
 
 
 if __name__ == '__main__':

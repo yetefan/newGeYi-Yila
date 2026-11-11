@@ -3,8 +3,8 @@
 
 2026-11-01 线上暴露的三个坑，全部锁在这里：
 
-1. **私聊只要不含「歌伊」就整条不回**：`directed` 以前只看 @/触发词，私聊里
-   '发语音啦'、'狗，修，金，sama~' 直接被丢掉（对方只好补一句「歌伊发语音正式一点啦」）。
+1. **私聊只要不含「伊菈」就整条不回**：`directed` 以前只看 @/触发词，私聊里
+   '发语音啦'、'狗，修，金，sama~' 直接被丢掉（对方只好补一句「伊菈发语音正式一点啦」）。
 2. **私聊当成群聊**：她在私聊里说过「这里是群诶，大家都看见了」——因为当前消息既没有
    场景说明，记忆块标题还写着「这个群最近发生过什么」。
 3. **私聊没有发言人标签 → 主人判定失效**：`昵称(QQ号)：` 只有群聊才带，
@@ -78,7 +78,7 @@ class FakeRuntime:
         self.config = {
             'passive_enabled': True,
             'private_enabled': True,
-            'triggers': ['歌伊'],
+            'triggers': ['伊菈'],
             'route_debug': False,
             'active_bare_image_factor': 0.3,
         }
@@ -107,7 +107,7 @@ class PrivateDirectedTest(unittest.TestCase):
     def test_private_message_with_mention_still_replies_once(self):
         rt = FakeRuntime()
         router = MessageRouter(rt)
-        router.route(make_msg('歌伊在吗', is_group=False, target=STRANGER))
+        router.route(make_msg('伊菈在吗', is_group=False, target=STRANGER))
         self.assertEqual(rt.scheduler.kinds, ['passive'])
 
     def test_group_message_without_trigger_is_not_a_passive_reply(self):
@@ -131,7 +131,7 @@ class PrivatePromptTest(unittest.TestCase):
         from newGeYi.runtime.app import Runtime
 
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
 
     def test_private_current_message_carries_speaker_label(self):
         msg = make_msg('我是你主人', is_group=False, target=STRANGER)
@@ -142,7 +142,7 @@ class PrivatePromptTest(unittest.TestCase):
         self.assertIn('只有你们两个人', current)
 
     def test_group_current_message_has_no_private_note(self):
-        msg = make_msg('歌伊在吗', is_group=True, target='1013491196',
+        msg = make_msg('伊菈在吗', is_group=True, target='1013491196',
                        sender_id=OWNER, sender_name='歌靡')
         messages = self.rt.prompt_builder.build(msg)
         current = messages[-1]['content']

@@ -1,5 +1,5 @@
 {
-    "name": "歌伊",
+    "name": "伊菈",
     "author": "歌靡",
     "namespace": "newGeYi",
     "info": "模块化角色扮演 AI 聊天插件：四层自动记忆 / 多渠道故障转移与手动锚点 / 世界书 / 图片理解与发送者归属 / 表情包 / 日语原声伴生语音 / 自我保护静默 / 输出安全审计 / 原生可视化调试台",
@@ -22,14 +22,14 @@
     ],
     "webui_config": [
         {
-            "title": "歌伊调试台",
+            "title": "伊菈调试台",
             "type": "iframe",
             "path": "webui/index.html"
         }
     ],
     "menu_config": [
         {
-            "title": "歌伊菜单",
+            "title": "伊菈菜单",
             "event": "newGeYi_Menu_001"
         }
     ]

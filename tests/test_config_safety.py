@@ -73,7 +73,7 @@ class BrokenConfigTest(_TempState):
         self.write(BROKEN)
         C.load_config()
         self.assertTrue(C.config_load_error())
-        self.write(json.dumps({'triggers': ['歌伊'], 'passive_enabled': True}))
+        self.write(json.dumps({'triggers': ['伊菈'], 'passive_enabled': True}))
         cfg = C.load_config()
         self.assertEqual(C.config_load_error(), '')
         C.save_config(dict(cfg, passive_enabled=False))
@@ -88,7 +88,7 @@ class BrokenConfigTest(_TempState):
 
 class NormalSaveTest(_TempState):
     def test_save_writes_atomically_and_keeps_rolling_backup(self):
-        self.write(json.dumps({'triggers': ['歌伊']}))
+        self.write(json.dumps({'triggers': ['伊菈']}))
         cfg = C.load_config()
         C.save_config(dict(cfg, passive_enabled=False))
         saved = json.loads(self.path.read_text(encoding='utf-8'))
@@ -129,7 +129,7 @@ class ExampleConfigTest(unittest.TestCase):
 
     def test_triggers_are_readable_chinese(self):
         triggers = self.example.get('triggers') or []
-        self.assertEqual(triggers, ['歌伊'], '触发词是 GBK 乱码（姝屼紛），照抄会叫不醒她')
+        self.assertEqual(triggers, ['伊菈'], '触发词是 GBK 乱码（姝屼紛），照抄会叫不醒她')
 
     def test_no_dead_keys(self):
         for dead in ('auto_memory_enabled', 'active_probability', 'active_cooldown_seconds',

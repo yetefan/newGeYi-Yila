@@ -22,12 +22,12 @@ DATA_DIR_NAME = 'newGeYi'
 # （app.json 的 version 必须跟它一致 —— 有 `tests/test_config.py` 锁着：
 #   `python -m unittest discover -s newGeYi/tests -t .`，两个版本号打架时最难排查）
 # 2026-10-30：上一轮发了 v2.6.0 但只改了 app.json，这里还留在 2.5.0，
-# 于是日志/「歌伊状态」全都是 v2.5.0，和 GitHub 上的 tag 对不上。
+# 于是日志/「伊菈状态」全都是 v2.5.0，和 GitHub 上的 tag 对不上。
 # 现在启动时会主动比对两个版本号，不一致就打 warning（见 version_mismatch）。
 PLUGIN_VERSION = '2.9.11'
 
 # 主动搭话的“无事可说不回复”标记（模型只需输出这一行即表示忽略）
-SKIP_ACTIVE = '【歌伊忽略】'
+SKIP_ACTIVE = '【伊菈忽略】'
 
 
 def code_stamp() -> str:
@@ -53,7 +53,7 @@ def code_stamp() -> str:
         return '未知'
     return datetime.datetime.fromtimestamp(newest).strftime('%m-%d %H:%M:%S')
 
-# 注意：早期那套「智慧歌伊模式」（快速模型 / 推理模型 双模型 + 模型池 + 切换模型指令）
+# 注意：早期那套「智慧伊菈模式」（快速模型 / 推理模型 双模型 + 模型池 + 切换模型指令）
 # 已经删掉了。现在模型由**渠道**决定，掉线时在渠道之间按稳定性切换（见 providers）。
 # 残留的 fast_model 只是「单渠道兼容模式」下的模型名（providers 为空时才会用到）。
 
@@ -100,7 +100,7 @@ DEFAULT_CONFIG = {
     # 为什么要分流：聊天和提炼的成本结构完全相反。
     #   聊天：输入大、输出小 → 缓存能省（实测官方缓存 100% vs 中转站 55%）
     #   提炼：输入≈输出，67% 成本在输出 → 缓存打不到痛点
-    # 实测（歌伊 582 次提炼 + 904 次聊天）分流后比纯中转站便宜 4~10%，
+    # 实测（伊菈 582 次提炼 + 904 次聊天）分流后比纯中转站便宜 4~10%，
     # 且聊天快 5 倍（1.7s vs 8.6s）。见 _research/final_cost_v2.py。
     #
     # 分流配置示例（聊天走官方、提炼走中转站）：
@@ -160,10 +160,10 @@ DEFAULT_CONFIG = {
     # 输出上限。大幅放开 token 上限，给长文本和细腻 RP 留足空间。
     'fast_max_tokens': 8192,
     # 触发词：子串匹配，命中任一即视为「在叫她」。默认给全名和两个常用简称。
-    'triggers': ['歌伊'],
+    'triggers': ['伊菈'],
     # 骰主 QQ 号：**通知类功能的唯一收件人**（「所有渠道都挂了」「自我保护静默」）。
     # 留空 = 这些通知全部发不出去，只在日志里留一条 warning（2026-10 踩过：
-    # 歌伊触发退场、骰主却一条私信都没收到）。也可以改用环境变量 GEYI_OWNER_IDS。
+    # 伊菈触发退场、骰主却一条私信都没收到）。也可以改用环境变量 GEYI_OWNER_IDS。
     'owner_ids': [],
     # @全体成员 算不算「在叫她」：默认**不算**（那是在叫所有人，不是跟她说话）。
     # 2026-11-03 之前它被当成 @她，于是群里发个公告她就抢着接话。
@@ -176,7 +176,7 @@ DEFAULT_CONFIG = {
     # 只在命中触发词时回应（triggers + private_trigger_extra + assistant_name）。
     # 关掉时保持旧行为（私聊每句都回）。没命中的消息仍进记忆缓冲，她知道你在说什么。
     'private_trigger_only': False,
-    # 私聊额外的触发词（不想动 triggers 时用这个，例如 ['在吗', '歌伊歌伊']）
+    # 私聊额外的触发词（不想动 triggers 时用这个，例如 ['在吗', '伊菈伊菈']）
     'private_trigger_extra': [],
     # 同一个人两条回复之间的最小间隔（秒）；期间到达的消息直接丢，不排队
     'private_min_interval': 4,
@@ -208,8 +208,8 @@ DEFAULT_CONFIG = {
     # 默认空 + 额度 0 = 功能关闭，不影响任何人。
     #
     # 2026-11-08 改成分两档（累计关系：2 档包含 1 档的全部权益）：
-    #   1 档「请歌伊吃一天饭」6 元：额 100 + 拥挤期不收紧
-    #   2 档「帮歌伊租半个月房子」20 元：额 120 + 拥挤期不收紧 + 记忆不裁剪
+    #   1 档「请伊菈吃一天饭」6 元：额 100 + 拥挤期不收紧
+    #   2 档「帮伊菈租半个月房子」20 元：额 120 + 拥挤期不收紧 + 记忆不裁剪
     #        + 记忆召回条数下限 8 + 内测优先
     # 判定逻辑统一在 runtime/sponsors.py，别在别处再写一遍名单比较。
     # 旧的 sponsor_ids 保留：按 1 档算，升级后行为不变，不需要迁移。
@@ -225,7 +225,7 @@ DEFAULT_CONFIG = {
     'sponsor_fact_floor': 8,
     # 内测优先：二档自动在内，这里可以再手加帮忙测试的朋友
     'beta_ids': [],
-    # 歌伊菜单末尾那一行鸣谢（赞助者的谢礼之一）。空白 = 不显示。
+    # 伊菈菜单末尾那一行鸣谢（赞助者的谢礼之一）。空白 = 不显示。
     # 为什么是**一整段自由文本**而不是按人维护的名单：
     #   ① 菜单是公开的，逐条列 QQ 号等于把赞助者号码挂出去；
     #   ② 名字该由骰主自己写（有人不想被点名）；
@@ -244,7 +244,7 @@ DEFAULT_CONFIG = {
     # 主人豁免：不评分、不注入关系块，世界书按最高阶段放行。
     'galgame_owner_exempt': True,
     # 额外豁免名单（role_prompt 里写死的主人 QQ；owner_ids 里的人也自动豁免）
-    'galgame_exempt_ids': ['2332239652'],
+    'galgame_exempt_ids': ['2397087988'],
     # 评审用的模型（留空沿用 fast_model）；它走 kind='affection'，可用 affection_provider 指到便宜渠道
     'galgame_judge_model': '',
     'galgame_judge_max_tokens': 1024,
@@ -308,7 +308,7 @@ DEFAULT_CONFIG = {
     'memory_fuzzy_dedup_threshold': 0.60, # 写入端模糊判重阈值（超过此值视为重复事实，转为刷新已有条目）
     'time_awareness_enabled': True,
     # 记忆提炼里代表「她自己」的署名（也是「AI 说了什么」的行首标签）
-    'assistant_name': '歌伊',
+    'assistant_name': '伊菈',
     # 全局附加请求头，会并进每个渠道（个别中转站要求自定义 header 时用）
     'extra_headers': {},
     # ===== 图片理解（多模态大幅放宽）=====
@@ -336,13 +336,15 @@ DEFAULT_CONFIG = {
     # 「取不到」的负缓存：QQ 图链过期是常态，10 分钟内同一个 ref 不再重试
     'image_fail_cache_seconds': 600,
     'emote_enabled': True,
+    # 被戳一戳（拍一拍）时是否自动回模板话/表情包。关了就是完全不搭理。
+    'poke_reply_enabled': True,
     'collapse_short_multiline': False,  # 默认关闭（由 config.json 开起）；单元测试依赖默认换行行为
     'strip_repeated_ellipsis': True,
     'strip_trailing_period': True,
     'emote_min_gap_seconds': 180,
     'emote_window_replies': 5,
     'emote_hourly_cap': 6,
-    # ===== 伴生语音（日语原声 · 本地极速TTS对接）=====
+    # ===== 伴生语音（GPT-SoVITS 原声 · 本地 TTS 对接）=====
     'voice_enabled': True,
     'voice_gateway_url': 'http://127.0.0.1:9885/v1/voice/synthesize',
     'voice_health_url': 'http://127.0.0.1:9885/health',
@@ -376,7 +378,7 @@ DEFAULT_CONFIG = {
     'sleep_window': '23:30-07:00',
     'sleep_pre_minutes': 30,
     'sleep_notice_once': True,
-    'sleep_notice_text': '（迷迷糊糊翻了个身）唔……歌伊已经睡下了……有事明天说嘛……',
+    'sleep_notice_text': '（迷迷糊糊翻了个身）唔……伊菈已经睡下了……有事明天说嘛……',
     'sleep_owner_exempt': False,
     # ===== 本地面板 =====
     # OlivOS 的「插件页面」是 1.0.x 才有的能力（webui_config 消息桥）。核心没有它时，
@@ -384,6 +386,14 @@ DEFAULT_CONFIG = {
     # 或者干脆 false 关掉（例如升级到 1.0.x 之后走原生入口）。
     'panel_local_enabled': True,
     'panel_local_port': 18765,
+    # ===== 自动同意好友申请 =====
+    # 协议端不把「好友申请」推过来时（2026-11-11 实测 LLBot 有头模式就是如此），
+    # 插件自己去 LLBot 的本机网页接口轮询并同意，见 runtime/friend_accept.py。
+    # 只同意普通申请；被 QQ 判成风险账号的那份不碰。默认关闭。
+    'friend_auto_accept': False,
+    'friend_auto_interval': 120,
+    'llbot_webui_url': 'http://127.0.0.1:3080',
+    'llbot_webui_token': '',
     'reply_audit_enabled': True,
     'reply_audit_fallback': '',
     # 神职头衔削弱：她跟人玩「封官过家家」时会自称「本教皇」「本大主教」，
@@ -506,7 +516,7 @@ def _find_plugin_root() -> Path:
 def get_state_dir() -> Path:
     """**可变状态**放这里：配置、数据库、导出的记忆、用户自己加的立绘。
 
-    ⚠️ 为什么不能放在 data/ 里（2026-09 源码级确认，歌伊和歌伊都踩过）：
+    ⚠️ 为什么不能放在 data/ 里（2026-09 源码级确认，伊菈和伊菈都踩过）：
     OlivOS 每次加载插件都会执行 pluginAPI.run_plugin_data_release_by_name：
 
         dataPath = './plugin/data/<ns>/data'

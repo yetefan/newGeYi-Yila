@@ -21,7 +21,7 @@
 "sleep_window": "23:30-07:00",  // 可以跨午夜；起止相同 = 不睡
 "sleep_pre_minutes": 30,        // 睡前提醒窗口（0 = 不提醒，直接睡）
 "sleep_notice_once": true,      // 睡着只应一句（关掉=每次被叫都应一句）
-"sleep_notice_text": "（迷迷糊糊翻了个身）唔……歌伊已经睡下了……有事明天说嘛……",
+"sleep_notice_text": "（迷迷糊糊翻了个身）唔……伊菈已经睡下了……有事明天说嘛……",
 "sleep_owner_exempt": false     // 主人是否免疫（默认不免疫，跟别人一样睡着）
 ```
 

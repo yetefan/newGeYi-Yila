@@ -2,7 +2,7 @@
 """token 台账：总量、按用途、按群聊/私聊。
 
 骰主 2026-11-08：「把群聊私聊、提炼、判断之类的 token 消耗都集中起来，
-在『歌伊状态』里显示今天共消耗多少 token」。
+在『伊菈状态』里显示今天共消耗多少 token」。
 
 这里锁三件事，都是"数字错了不会报错、只会让人做出错误判断"的那类：
   1. `total_tokens` = 输入 + 输出（不是只有输出，也不是只有输入）；
@@ -104,7 +104,7 @@ class StatusLineTest(unittest.TestCase):
             self.assertIn(kind, KIND_LABELS)
 
     def test_status_token_line(self):
-        """「歌伊状态」里那一行的实际文字：**合计在最前面**，因为骰主要的就是这个数。"""
+        """「伊菈状态」里那一行的实际文字：**合计在最前面**，因为骰主要的就是这个数。"""
         from newGeYi.routing.commands import CommandRouter
         stats = {'total_tokens': 754618, 'input_tokens': 704017,
                  'output_tokens': 50601, 'cached_tokens': 0}

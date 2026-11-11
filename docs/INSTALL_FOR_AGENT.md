@@ -1,4 +1,4 @@
-﻿# newGeYi（歌伊）可视化调试台 · 服务器端 Agent 安装说明
+﻿# newGeYi（伊菈）可视化调试台 · 服务器端 Agent 安装说明
 
 本压缩包为 **OlivOS 插件 `newGeYi`（v2.8.10 开发，已安装到 v2.8.11 基线上并升到 v2.8.12）原生 WebUI 可视化调试台部署包**。  
 供服务器端 Agent 直接执行增量覆盖升级或完整目录部署。
@@ -26,12 +26,12 @@
 
 | 路径（相对于 `plugin/app/newGeYi/`） | 操作类型 | 说明 |
 | --- | --- | --- |
-| `app.json` | 修改 | 插件名改为 `歌伊`（去除“歌伊圣堂”），新增 `webui_config` 注册 `webui/index.html` |
+| `app.json` | 修改 | 插件名改为 `伊菈`（去除“伊菈圣堂”），新增 `webui_config` 注册 `webui/index.html` |
 | `main.py` | 修改 | `Event.init` 惰性挂载 `Panel`；`Event.menu` 识别 `webui` 上下文并分流至 `Panel.handle_event`；`Event.save` 安全关闭日志监听 |
 | `runtime/app.py` | 修改 | `load_role_prompt()` 优先读取 `plugin/data/newGeYi/role_prompt.webui.txt`（使网页修改角色设定在插件重载后持久保留） |
 | `panel.py` | **新增** | 原生 WebUI 后端控制器（10 个白名单 Action、乐观锁 Revision、写操作幂等缓存、零副作用只读调试预览、800 条环形脱敏日志） |
 | `panel_helpers.py` | **新增** | 配置字段白名单严格校验器、API Key / Bearer Token / URL 凭据递归脱敏器 |
-| `webui/index.html` | **新增** | 单文件可视化调试台（内联 CSS/JS，已内嵌 Base64 歌伊水彩立绘与 Q 版比心导航头像，零外部请求） |
+| `webui/index.html` | **新增** | 单文件可视化调试台（内联 CSS/JS，已内嵌 Base64 伊菈水彩立绘与 Q 版比心导航头像，零外部请求） |
 | `webui/assets/geyi-avatar.webp` | **新增** | 侧栏 Q 版比心导航头像（192×192 WebP，已剥离元数据） |
 | `webui/assets/geyi-portrait.webp` | **新增** | 总览页水彩立绘（630×864 透明底 WebP，已剥离元数据） |
 | `tools/run_webui_tests.py` | **新增** | 强制临时目录隔离的全量回归测试运行器（234 项测试） |
@@ -70,7 +70,7 @@
 
 1. **检查 `app.json` 无 BOM 且 JSON 合法**：
    ```bash
-   python3 -c "from pathlib import Path; import json; b=Path('<OLIVOS_ROOT>/plugin/app/newGeYi/app.json').read_bytes(); assert not b.startswith(b'\xef\xbb\xbf'), 'BOM detected!'; d=json.loads(b); assert d['name']=='歌伊' and d['webui_config'][0]['path']=='webui/index.html'; print('app.json OK')"
+   python3 -c "from pathlib import Path; import json; b=Path('<OLIVOS_ROOT>/plugin/app/newGeYi/app.json').read_bytes(); assert not b.startswith(b'\xef\xbb\xbf'), 'BOM detected!'; d=json.loads(b); assert d['name']=='伊菈' and d['webui_config'][0]['path']=='webui/index.html'; print('app.json OK')"
    ```
 2. **运行隔离回归测试（自动使用临时目录，绝不触碰线上数据库）**：
    ```bash
@@ -84,16 +84,16 @@
 2. 查看 OlivOS 启动日志，确认出现：
    - `状态目录: .../plugin/data/newGeYi`
    - 无 `插件初始化失败` 或 `调试页面初始化失败` 报错。
-3. 登录 **OlivOS WebUI → 左侧栏「插件页面」→ 点击「歌伊 / 歌伊调试台」**：
+3. 登录 **OlivOS WebUI → 左侧栏「插件页面」→ 点击「伊菈 / 伊菈调试台」**：
    - 顶栏右侧徽章应显示绿色 **「桥接已连接」**；
-   - **总览页**应显示歌伊立绘、左上角 Q 版比心头像、当前在线 Bot 账号、渠道健康状态与今日 Token 用量；
+   - **总览页**应显示伊菈立绘、左上角 Q 版比心头像、当前在线 Bot 账号、渠道健康状态与今日 Token 用量；
    - **调试台**输入任意测试语句点击「运行只读预览」，应返回路由分支判断与拼装后的 Prompt 消息序列，且徽章显示 `无网络 · 无发送 · 无写入`。
 
 ---
 
 ## 四、常见问题与回滚方法
 
-- **侧栏看不到「插件页面」或「歌伊调试台」**：
+- **侧栏看不到「插件页面」或「伊菈调试台」**：
   请确认服务器端 OlivOS 核心版本支持插件原生 WebUI（`webui_config`），且修改 `app.json` 后已执行过「重载插件」。
 - **页面提示「当前为独立页面 / 离线」**：
   不要直接双击打开 `index.html` 或裸访问静态路径，必须从 **OlivOS WebUI 左侧栏 → 插件页面** 点进，宿主才会注入 `postMessage` 通信桥。
@@ -106,7 +106,7 @@
 
 v2.8.10 → v2.8.11 之间插件本体有 4 处变化，安装时必须一并处理，否则面板会与新行为不一致：
 
-1. **`app.json` 版本与品牌**：`version` 保持 `2.8.11`（不要退回 2.8.10），`name` 用 `歌伊`
+1. **`app.json` 版本与品牌**：`version` 保持 `2.8.11`（不要退回 2.8.10），`name` 用 `伊菈`
    （本包的 `tests/test_webui_assets.py` 会校验，且校验 `docs/WEBUI*.md`、`README.md`、
    `webui/index.html` 不得出现旧品牌串）。
 2. **`runtime/app.py::load_role_prompt()`**：v2.8.11 的 `_enter_rest()` 改过（私聊无限期静默），

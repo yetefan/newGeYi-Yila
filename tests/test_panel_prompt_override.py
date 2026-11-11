@@ -43,7 +43,7 @@ class PromptOverrideTest(unittest.TestCase):
             state = Path(folder)
             (state / 'role_prompt.webui.txt').write_bytes(b'\xff\xff')
             with patch.object(config, 'get_state_dir', return_value=state):
-                self.assertEqual(Runtime.load_role_prompt(object()), '你是歌伊，一个可爱的AI助手。')
+                self.assertEqual(Runtime.load_role_prompt(object()), '你是伊菈，一个可爱的AI助手。')
 
 
 if __name__ == '__main__':

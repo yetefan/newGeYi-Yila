@@ -55,7 +55,7 @@ class _RuntimeCase(unittest.TestCase):
         from newGeYi.runtime.app import Runtime
 
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
         # ⚠️ 每个用例换一个会话号：整个模块共用一个临时数据目录，
         # 复用同一个 session_key 会让上一个用例的 turns 混进来（踩过两次）。
         # 计数器必须是**模块级**的 —— 之前写成 `type(self)._seq`，每个子类各数各的，

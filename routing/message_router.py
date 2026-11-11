@@ -63,7 +63,7 @@ class MessageRouter:
     def route(self, msg: IncomingMessage) -> None:
         cfg = self.r.config
         # 机器人/其他插件账号发来的消息一律不回应：腾讯系官方机器人被引用时会自动 @ 回复，
-        # 与我们这边形成无限循环刷屏。消息仍会进旁观窗口，所以歌伊看得见、但不去接话。
+        # 与我们这边形成无限循环刷屏。消息仍会进旁观窗口，所以伊菈看得见、但不去接话。
         if msg.sender_is_bot:
             self._debug(msg, False, False, '发送者被判定为机器人账号')
             return
@@ -73,12 +73,12 @@ class MessageRouter:
         session_key = msg.session.as_text()
         is_resting = getattr(self.r, 'is_resting', None)
         if callable(is_resting) and is_resting(session_key):
-            self._debug(msg, False, False, '歌伊在本群自我保护静默中')
+            self._debug(msg, False, False, '伊菈在本群自我保护静默中')
             return
         # 私聊里对方的每一句都是对你说的，不需要靠触发词点名。
-        # 以前这里只看「有没有 @ / 有没有触发词」，结果**私聊里只要不含「歌伊」就整条丢掉**：
+        # 以前这里只看「有没有 @ / 有没有触发词」，结果**私聊里只要不含「伊菈」就整条丢掉**：
         # 线上实测 2026-11-01 20:47~20:50，'发语音啦'、'狗，修，金，sama~' 这样的私聊
-        # 一句都没回（对方只好补一句「歌伊发语音正式一点啦」才被接住）。
+        # 一句都没回（对方只好补一句「伊菈发语音正式一点啦」才被接住）。
         # 2026-11-05 起可以按需切回"只在触发词命中时回应"（private_trigger_only）：
         # 私聊多了并发扛不住时，把"每句都回"降级成"叫到才回"，其余消息照样进记忆。
         if msg.is_group:
@@ -132,24 +132,30 @@ class MessageRouter:
                 # 私聊再过失控三道闸（触发词已在上面判过：连发间隔 / 连发条数 / 每日限额）。
                 # 闸门只挡"排一次回复"，消息本身照常进记忆缓冲——她知道你在说啥，只是不回。
                 if not msg.is_group:
-                    allowed, why = self._private_gate().allow(msg)
-                    if not allowed:
-                        if why.startswith('quota'):
-                            logger.info('私聊额度用尽（%s），本条不回 | %s',
-                                        why, msg.session.as_text()[-12:])
+                    gate = self._private_gate()
+                    # 检查、排队、记账占着同一把锁：中间不能插进另一条把同一个名额也用掉。
+                    with gate._lock:
+                        allowed, why = gate.allow(msg)
+                        if not allowed:
+                            if why.startswith('quota'):
+                                logger.info('私聊额度用尽（%s），本条不回 | %s',
+                                            why, msg.session.as_text()[-12:])
+                            else:
+                                logger.debug('私聊闸门拦住（%s）| %s', why,
+                                             msg.session.as_text()[-12:])
+                            self._debug(msg, directed, passive_allowed, '私聊闸门：' + why)
+                            return
+                        if not self.r.scheduler.submit(msg, kind='passive'):
+                            logger.warning('被动回复没能进队列（会话积压已满）| %s | %r',
+                                           msg.session.as_text()[-16:], (msg.text or '')[:30])
                         else:
-                            logger.debug('私聊闸门拦住（%s）| %s', why,
-                                         msg.session.as_text()[-12:])
-                        self._debug(msg, directed, passive_allowed, '私聊闸门：' + why)
-                        return
+                            gate.commit(msg.session.as_text())
+                    return
                 # 提交失败（队列满）以前是彻底静默的：用户只看到「她不理我」，
                 # 日志里连一行都没有。这里补一条，和 scheduler 里的告警对得上。
                 if not self.r.scheduler.submit(msg, kind='passive'):
                     logger.warning('被动回复没能进队列（会话积压已满）| %s | %r',
                                    msg.session.as_text()[-16:], (msg.text or '')[:30])
-                elif not msg.is_group:
-                    # 只有真正排进去了才记账（队列满不扣额度）
-                    self._private_gate().commit(msg.session.as_text())
             elif self.r.config.get('route_debug'):
                 logger.info('被点名但本群被动回复已关，保持安静 | %s', msg.session.as_text()[-16:])
             return
@@ -222,5 +228,5 @@ class MessageRouter:
         )
 
     def _trigger_hit(self, text: str) -> bool:
-        triggers = self.r.config.get('triggers', []) or ['歌伊']
+        triggers = self.r.config.get('triggers', []) or ['伊菈']
         return any(kw in text for kw in triggers)

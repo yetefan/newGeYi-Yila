@@ -23,6 +23,7 @@ BOOL_KEYS = {
     'memory_private_enabled', 'memory_private_to_group',
     'image_enabled', 'emote_enabled', 'voice_enabled', 'rest_enabled', 'rest_private_forever',
     'panel_local_enabled',
+    'friend_auto_accept',
     'galgame_enabled', 'galgame_shadow', 'galgame_owner_exempt',
     'reply_audit_enabled', 'religion_guard_enabled',
     'sleep_enabled', 'sleep_notice_once', 'sleep_owner_exempt',
@@ -62,6 +63,7 @@ NUMBER_KEYS = {
     'gate_score_window': (8, 1000, True), 'active_bare_image_factor': (0, 1, False),
     'rest_minutes': (0.1, 1440, False), 'voice_group_cooldown': (0, 86400, False),
     'panel_local_port': (0, 65535, True),
+    'friend_auto_interval': (20, 86400, True),
     'galgame_judge_min_chars': (1, 50, True), 'galgame_cross_memory_min_stage': (0, 5, True),
     'galgame_tag_daily_limit': (1, 5, True),
     'galgame_mild_gap': (0, 3, True),
@@ -81,6 +83,7 @@ NUMBER_KEYS = {
 STRING_KEYS = {'assistant_name': 80, 'active_quiet_hours': 11, 'reply_audit_fallback': 2000,
                'galgame_judge_model': 120, 'affection_provider': 80,
                'sponsor_thanks_text': 200,
+               'llbot_webui_url': 200, 'llbot_webui_token': 200,
                'sleep_window': 11, 'sleep_notice_text': 120}
 LIST_KEYS = {'triggers': (50, 80), 'owner_ids': (50, 40), 'ignore_sender_ids': (200, 40),
              'incomplete_tails': (100, 80), 'galgame_exempt_ids': (50, 40),
@@ -93,7 +96,7 @@ GALGAME_ARRAYS = {'galgame_thresholds': (0, 300), 'galgame_min_days': (0, 365),
 EDITABLE_KEYS = sorted((BOOL_KEYS | set(NUMBER_KEYS) | set(STRING_KEYS) | set(LIST_KEYS)
                         | set(GALGAME_ARRAYS) | {'gate_weights', 'active_tier_probability'}) & set(plugin_config.DEFAULT_CONFIG))
 SECRET_FIELDS = ['api_key', 'voice_auth_token', 'voice_onebot_access_token', 'extra_headers',
-                 'providers[].api_key', 'providers[].extra_headers']
+                 'llbot_webui_token', 'providers[].api_key', 'providers[].extra_headers']
 _SECRET_NAME = re.compile(r'(?:api[_-]?key|access[_-]?token|auth|password|secret|credential|authorization)', re.I)
 _URL_AUTH = re.compile(r'(https?://)([^\s/?#]*@)', re.I)
 _URL_QUERY = re.compile(r'(https?://[^\s?#]+)\?[^\s#]*', re.I)

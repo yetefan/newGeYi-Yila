@@ -10,7 +10,7 @@ from PIL import Image
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-PORTRAIT_SOURCE = Path(r"<素材目录>\歌伊.png")
+PORTRAIT_SOURCE = Path(r"<素材目录>\伊菈.png")
 AVATAR_SOURCE = Path(r"<素材目录>\头像源图.png")
 OUT = ROOT / "webui" / "assets"
 HTML_PATH = ROOT / "webui" / "index.html"

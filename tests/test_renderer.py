@@ -4,8 +4,8 @@
 背景（2026-10-30 线上）：小群 1130455496 收到一条完整的条列提纲——
 
     赛博刀子：
-    - 夸歌伊厉害，但安抚熠暗…
-    歌伊的反应：
+    - 夸伊菈厉害，但安抚熠暗…
+    伊菈的反应：
     - 长度约 40-60 字。一条一段。
     - 别长篇大论。不用 Markdown。那当然啦～（得意地昂了昂下巴）…
 
@@ -37,9 +37,9 @@ from newGeYi.presentation.renderer import (  # noqa: E402
 # 线上原样（去掉了群号等无关内容）
 LEAK = (
     '赛博刀子：\n'
-    '- 夸歌伊厉害，但安抚熠暗“你们的赛道暂时不相交”\n'
+    '- 夸伊菈厉害，但安抚熠暗“你们的赛道暂时不相交”\n'
     '- 说明刀子在玩梗/在解释两人的角色定位（一个修女AI，一个MC凋零骷髅人设/或者别的Bot/跑团角色）\n'
-    '歌伊的反应：\n'
+    '伊菈的反应：\n'
     '- 听到刀子夸自己很受用，骄傲\n'
     '- 对“赛道不相交”好奇或调侃\n'
     '- “赛道？什么赛道嘛，搞得像我们要比赛跑一样～不过放心啦…”\n'
@@ -60,11 +60,11 @@ class OutlineDraftTest(unittest.TestCase):
     def test_outline_draft_is_stripped(self):
         out = self.renderer._strip_thinking_process(LEAK)
         self.assertIn(TAIL, out)
-        for artifact in ('赛博刀子', '歌伊的反应', '长度约', '是否发立绘', '一条一段'):
+        for artifact in ('赛博刀子', '伊菈的反应', '长度约', '是否发立绘', '一条一段'):
             self.assertNotIn(artifact, out, f'草稿残留: {artifact}')
 
     def test_draft_only_is_dropped(self):
-        draft_only = '赛博刀子：\n- 夸她厉害\n歌伊的反应：\n- 长度约 40 字。一条一段。'
+        draft_only = '赛博刀子：\n- 夸她厉害\n伊菈的反应：\n- 长度约 40 字。一条一段。'
         self.assertEqual(self.renderer._strip_thinking_process(draft_only), '')
 
     def test_english_inline_preamble_is_stripped(self):
@@ -97,9 +97,9 @@ class OutlineDraftTest(unittest.TestCase):
                              f'正常回复被误改: {sample}')
 
     def test_silent_mark_without_brackets(self):
-        """内部哨兵被裸写出去：线上真发过 11 次 `歌伊忽略`（10-30~10-31，4 个群）。"""
-        silent = ['【歌伊忽略】', '歌伊忽略', '[歌伊忽略]', '（歌伊忽略）',
-                  '【歌伊忽略】。', ' **歌伊忽略** ', '歌伊忽略！', '[NO_REPLY]', '不回复']
+        """内部哨兵被裸写出去：线上真发过 11 次 `伊菈忽略`（10-30~10-31，4 个群）。"""
+        silent = ['【伊菈忽略】', '伊菈忽略', '[伊菈忽略]', '（伊菈忽略）',
+                  '【伊菈忽略】。', ' **伊菈忽略** ', '伊菈忽略！', '[NO_REPLY]', '不回复']
         for sample in silent:
             self.assertTrue(is_silent_reply(sample), f'哨兵漏判: {sample!r}')
 
@@ -107,7 +107,7 @@ class OutlineDraftTest(unittest.TestCase):
         samples = [
             '（歪头）诶？真的假的',
             '哈哈，那当然啦～今天天气怪好的',
-            '歌伊忽略了这条消息',
+            '伊菈忽略了这条消息',
             '你别忽略我说话啊',
             '这条我不回复你了，哼',
         ]
@@ -118,7 +118,7 @@ class OutlineDraftTest(unittest.TestCase):
 # 2026-11-01 线上原样（小群 957309761，B 站愚人节剧情视频触发的主动搭话）：
 # 模型把「写给自己的写稿备忘」整段发了出去
 PLAN_LEAK = (
-    '（或者顺着刚才聊的边狱话题发出来的），作为歌伊，可以结合愚人节剧情被创飞的梗、'
+    '（或者顺着刚才聊的边狱话题发出来的），作为伊菈，可以结合愚人节剧情被创飞的梗、'
     '或者画风突变女仆卡戎/马娘那些离谱镜像世界来吐槽或搭话。\n'
     '- 风格：口语、30~70字以内，自然，不换行，可带一个动作或[EMOTE]。\n'
     '- 注意情绪立绘：惊讶/死鱼眼/晕乎乎等。选“惊讶”或“死鱼眼”都很贴切。\n'
@@ -159,8 +159,8 @@ class PlanLeakTest(unittest.TestCase):
             self.assertTrue(looks_like_plan(sample), f'漏判: {sample!r}')
 
     def test_instruction_voice_without_labels(self):
-        """没有提纲标签、但通篇是「作为歌伊，可以…」的指令口吻，也算泄露。"""
-        sample = '作为歌伊，可以结合刚才的话题吐槽两句'
+        """没有提纲标签、但通篇是「作为伊菈，可以…」的指令口吻，也算泄露。"""
+        sample = '作为伊菈，可以结合刚才的话题吐槽两句'
         self.assertTrue(looks_like_plan(sample))
         self.assertIsNone(self.renderer.render(sample, fake_msg()))
 
@@ -194,8 +194,8 @@ class AtCodeTest(unittest.TestCase):
 
     # ---- 入参：OP / CQ 的 @ 码 → @名字 ----
     def test_op_at_uses_name(self):
-        self.assertEqual(op_codes_to_plain('[OP:at,id=2933419998,name=歌伊] 你好'),
-                         '@歌伊 你好')
+        self.assertEqual(op_codes_to_plain('[OP:at,id=2933419998,name=伊菈] 你好'),
+                         '@伊菈 你好')
 
     def test_cq_at_uses_name(self):
         self.assertEqual(op_codes_to_plain('[CQ:at,qq=123,name=小明] 在吗'),

@@ -79,7 +79,7 @@ provider.timeout 是 45~60 秒，60 秒的总预算意味着**第一条超时就
 
 ```python
 # 以前（_escalate_to_last_resort 里）
-self._notify_cb(f'🚨 歌伊的模型渠道全挂了…')   # 裸调用，不查 notify_cooldown
+self._notify_cb(f'🚨 伊菈的模型渠道全挂了…')   # 裸调用，不查 notify_cooldown
 ```
 
 `_notify_all_down` 有 600 秒冷却，但这条路径直接发。手动"切换渠道"会清掉 `_hold_name`，

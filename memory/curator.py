@@ -26,7 +26,7 @@ from ..storage.database import SQLiteStore
 logger = logging.getLogger('newGeYi.curator')
 
 # ==================== 视频/链接降噪 ====================
-# 为什么单独做：QQ 的 B 站分享卡片进到消息文本里只剩一串 BV 号（"歌伊看看BV1cPuAzDEZP"）。
+# 为什么单独做：QQ 的 B 站分享卡片进到消息文本里只剩一串 BV 号（"伊菈看看BV1cPuAzDEZP"）。
 # 提炼模型看到编号往往会老实记一条「对方分享了B站视频（BV1xx）」——零信息量，
 # 还因为 bili 插件写的那条是 explicit（免淘汰）而越积越多。
 # 处理原则：编号换成「（分享了视频）」这种可读占位；整条只有链接的更直接不记。
@@ -37,7 +37,7 @@ _OP_CODE_RE = re.compile(r'\[(?:OP|CQ):[^\]]*\]')
 
 # 只剩"看看/听听/这个"这类指令词时，说明这条消息除了分享没别的内容
 _STUB_WORDS = ('看看这个', '看一下', '看看嘛', '看看', '看下', '康康', '听听',
-               '这条', '这个', '视频', '分享', '快看', '歌伊', '你')
+               '这条', '这个', '视频', '分享', '快看', '伊菈', '你')
 
 
 def clean_video_noise(text) -> tuple[str, bool]:
@@ -73,7 +73,7 @@ CURATOR_SYSTEM = '你是记忆整理助手，只输出 JSON，不要任何解释
 # 拆开之后：system = CURATOR_SYSTEM + CURATOR_RULES（约 330 token，恒定），
 # user = CURATOR_TAIL（{known} + 聊天记录，每轮都变）。
 # 官方实测缓存命中 100%（20/20），中转站 55%（多后端轮询）。
-CURATOR_RULES = """下面是一个 QQ 群最近的一段聊天记录（每行开头是「QQ号 昵称」，AI 说的标为 AI）。
+CURATOR_RULES = """下面是一个 QQ 群最近的一段聊天记录（每行开头是「QQ号 昵称」；标注为「{assistant}」的行是她本人说的）。
 请提炼值得长期记住的信息，只输出 JSON：
 
 {{
@@ -86,7 +86,7 @@ CURATOR_RULES = """下面是一个 QQ 群最近的一段聊天记录（每行开
     {{"user_id": "QQ号", "summary": "该群友的个性特质与互动印象（1句话，无明显特质则留空）"}}
   ],
   "self_memories": [
-    {{"content": "歌伊自己的经历/承诺/情绪", "kind": "event/promise/feeling", "importance": 0.6}}
+    {{"content": "伊菈自己的经历/承诺/情绪", "kind": "event/promise/feeling", "importance": 0.6}}
   ]
 }}
 
@@ -94,7 +94,7 @@ CURATOR_RULES = """下面是一个 QQ 群最近的一段聊天记录（每行开
 1. user_id 必须严格照抄聊天记录里出现过的 QQ 号，绝对不许编造、推测或改写。
 2. user_facts 只记「这个人本人的稳定事实」：身份、职业、偏好、习惯、长期经历。
    - 不记：一次性的互动、玩笑、角色扮演内容、情绪化的气话
-   - 不记：{assistant}（AI）说的话——那是 AI 自己的事，不属于任何用户
+   - 不记：{assistant}（她本人）说的话——那是她自己的事，不属于任何用户
    - scope：通用个人特质/偏好填 "global"，本群特有梗/职务填 "group"
    - keywords：给 3-6 个**将来能用来搜到这条事实**的词，逗号分隔：
      · 同义词和上位词都要给（事实写「跑团」，补「TRPG,桌游」；写「原神」，补「手游,米哈游」）；
@@ -108,7 +108,7 @@ CURATOR_RULES = """下面是一个 QQ 群最近的一段聊天记录（每行开
    - 第一次见到这个人时，才凭这一批聊天新建。
 5. self_memories 只记「{assistant}自己」的经历、答应过的承诺、明显的情绪波动。不记：关于年龄、称呼的口舌争辩或群友的调侃打趣。
    也不要用「软件/程序/数据」的视角写她：不要出现「接入模型」「部署在服务器」「功能上线」「测试数据」「代码 / bug / 接口」这类措辞，
-   更不要写成「我是数据」「我是 AI」「靠电活着」。主人给她改东西，就用她的说法记成「主人在她的圣堂里添了东西、给她调了法器」。
+   更不要写成「我是数据」「我是 AI」「靠电活着」。主人给她改东西，就用她的说法记成「主人给她添了新东西」或「主人调了她的能力」。
 6. group_summary 只写公共事件，不要写任何人的私人信息。
 7. 没有可记的内容就留空数组，不要硬凑。
 8. **已经在「已知事实」里的有效信息不要再重复记一遍**。
@@ -181,7 +181,7 @@ class MemoryCurator:
         self.config = config
         self.store = store
         self.gateway = gateway
-        self.assistant_name = str(config.get('assistant_name') or '歌伊')
+        self.assistant_name = str(config.get('assistant_name') or '伊菈')
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -211,7 +211,7 @@ class MemoryCurator:
         )
 
     def buffer_assistant(self, session_key: str, content: str) -> int:
-        """把歌伊自己刚发的回复写进缓冲——提炼器据此区分「谁说的」。"""
+        """把伊菈自己刚发的回复写进缓冲——提炼器据此区分「谁说的」。"""
         return self.store.buffer_append(
             session_key, 'assistant', content, sender_name=self.assistant_name,
         )
@@ -309,7 +309,7 @@ class MemoryCurator:
             if not content:
                 continue
             if row.get('role') == 'assistant':
-                lines.append(f'[AI {self.assistant_name}] {content}')
+                lines.append(f'[{self.assistant_name}] {content}')
                 continue
             # 历史缓冲里可能还有没降噪过的视频分享（带 BV 号），这里再兜一层
             content, pure_share = clean_video_noise(content)
@@ -680,7 +680,7 @@ class MemoryCurator:
         memories = self.store.list_self_memories(session_key, limit=6)
         if memories:
             lines.append('')
-            lines.append('歌伊自己的记忆:')
+            lines.append('伊菈自己的记忆:')
             for row in memories:
                 lines.append(f'  · ({row["kind"]}) {row["content"]}')
         summaries = self.store.recent_group_summaries(session_key, limit=2)

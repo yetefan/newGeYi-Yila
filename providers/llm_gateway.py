@@ -113,7 +113,7 @@ _KEY_UNHEALTHY = 'gw.unhealthy'
 _KEY_HISTORY = 'gw.history'
 _KEY_ANCHOR = 'gw.anchor'
 # 「锁定到兜底渠道」：五个候选全挂之后按骰主的口径切官方 DeepSeek 并锁死，
-# 直到有人手动「切换渠道 X」。和 anchor 分开存，因为 anchor 的语义是
+# 直到有人手动「伊菈切换 X」。和 anchor 分开存，因为 anchor 的语义是
 # 「不许越过它往上爬」，而这里是「**只准用它**」，用它表达不了。
 _KEY_HOLD = 'gw.hold'
 
@@ -136,7 +136,7 @@ class Provider:
     为什么需要它：聊天和提炼的成本结构完全相反——
       聊天：输入大、输出小，缓存能省（实测官方缓存 100% vs 中转站 55%）
       提炼：输入≈输出，成本 67% 在输出，缓存打不到痛点
-    实测（歌伊 582 次提炼 + 904 次聊天）混合路由比纯中转站便宜 4~10%，
+    实测（伊菈 582 次提炼 + 904 次聊天）混合路由比纯中转站便宜 4~10%，
     且聊天快 5 倍（1.7s vs 8.6s）。详见 _research/final_cost_v2.py。
     """
 
@@ -158,7 +158,7 @@ class Provider:
         raw_kinds = kinds if isinstance(kinds, (list, tuple, set)) else None
         self.kinds = {str(k).strip() for k in raw_kinds if str(k).strip()} if raw_kinds else None
         self.protocol = str(protocol).strip().lower() or 'openai'
-        # manual_only：可选渠道。会加载、可「切换渠道」选中，但**永不参与自动故障转移**，
+        # manual_only：可选渠道。会加载、可「伊菈切换」选中，但**永不参与自动故障转移**，
         # 也不会被恢复探测自动切回去——只有骰主手动切换才会启用。
         self.manual_only = bool(manual_only)
 
@@ -316,7 +316,7 @@ class LLMGateway:
 
         语义（2026-10 起，需求来自「中转站靠不住、反代额度会用完」）：
 
-        - 骰主用「切换渠道 X」手动指定的那个渠道是**顶**；
+        - 骰主用「伊菈切换 X」手动指定的那个渠道是**顶**；
         - 自动故障转移只在锚点**及其以下**的渠道里挑备份，绝不自作主张往上跳；
         - 后台探测也只爬回到锚点为止，不会去碰比它更高优先级的渠道
           （典型：免费反代额度用完了，探测偶尔还能通，但一上去就又 429）。
@@ -471,7 +471,7 @@ class LLMGateway:
         return text
 
     def status_text(self) -> str:
-        """给命令用的渠道状态文本。"""
+        """给命令用的伊菈渠道文本。"""
         with self._lock:
             pairs = list(self._pairs)
             current = self._current_name
@@ -483,12 +483,12 @@ class LLMGateway:
         lines = ['--- 模型渠道 ---']
         if hold:
             lines.append(f'⛔ 已锁定兜底渠道: {hold}（五个候选全挂后自动切入）'
-                         f' → 不再尝试其它渠道；「切换渠道 <名称|自动>」可解除')
+                         f' → 不再尝试其它渠道；「伊菈切换 <名称|自动>」可解除')
         elif anchor:
             anchor_provider = next((p for p, _ in pairs if p.name == anchor), None)
             model = anchor_provider.model if anchor_provider is not None else '?'
             lines.append(f'手动锚点: {anchor}（{model}）'
-                         f' → 故障只在它以下找备份，恢复只回到这里；「切换渠道 自动」取消')
+                         f' → 故障只在它以下找备份，恢复只回到这里；「伊菈切换 自动」取消')
         else:
             lines.append('手动锚点: 无（按优先级自动恢复，会一路爬回最上面）')
         for index, (provider, state) in enumerate(pairs, 1):
@@ -518,7 +518,7 @@ class LLMGateway:
         return '\n'.join(lines)
 
     def switch_to(self, name_or_index: str) -> str:
-        """手工切换渠道，返回结果文本。
+        """手工伊菈切换，返回结果文本。
 
         手动切换会同时把目标设为**手动锚点**：之后自动故障转移只在它及其以下找备份，
         后台探测也只爬回到它为止。传「自动」则取消锚点，恢复成按优先级自动恢复。
@@ -558,7 +558,7 @@ class LLMGateway:
                         target = provider
                         break
             if target is None:
-                return f'找不到渠道：{key}（用「渠道状态」看可用列表）'
+                return f'找不到渠道：{key}（用「伊菈渠道」看可用列表）'
             old = self._current_name
             same = (target.name == old)
             was_held = bool(self._hold_name)
@@ -577,7 +577,7 @@ class LLMGateway:
                         f'已设为手动锚点，自动恢复只会回到这里{unlock}')
             return (f'✅ 已切换到渠道 {target.name}（{target.model}）\n'
                     f'已设为手动锚点：故障时只在它以下的渠道里找备份，'
-                    f'恢复也只回到这里（「切换渠道 自动」可取消）{unlock}')
+                    f'恢复也只回到这里（「伊菈切换 自动」可取消）{unlock}')
 
     # ==================== 调用 ====================
     def chat(self, req: ModelRequest, kind: str = 'chat', session_key: str = '') -> ModelResult:
@@ -671,7 +671,7 @@ class LLMGateway:
         - **锁定**（`gw.hold`）而不是普通锚点：官方 DeepSeek 排在最后，普通锚点的
           「不许越过它往上」语义在这里会被 "之下没有渠道" 的兜底逻辑绕过；
         - 锁定期间 `probe_once` 不再自动爬回，`_switch_locked` 也不再把渠道切走；
-        - 解除只有一条路：骰主「切换渠道 X」或「切换渠道 自动」。
+        - 解除只有一条路：骰主「伊菈切换 X」或「伊菈切换 自动」。
         """
         name = str(self._failover_cfg.get('last_resort_provider', 'official-chat') or '').strip()
         if not name:
@@ -697,7 +697,7 @@ class LLMGateway:
             self._append_history_locked(old, name, 'all_down', error_code)
             self._persist_locked()
         logger.warning('候选渠道两轮全挂（%s），已切到兜底渠道 %s 并锁定；'
-                       '「切换渠道 X」可解除', error_code, name)
+                       '「伊菈切换 X」可解除', error_code, name)
         cfg = self._failover_cfg
         if not cfg.get('notify_owner', True) or self._notify_cb is None:
             return
@@ -708,7 +708,7 @@ class LLMGateway:
         self._notify_all_down(
             error_code,
             detail=(f'已自动切到兜底渠道「{name}」并锁定，不再尝试其它渠道。\n'
-                    f'想切回：在群里发「切换渠道 <名称>」（先「渠道状态」看列表）。'),
+                    f'想切回：在群里发「伊菈切换 <名称>」（先「伊菈渠道」看列表）。'),
             tried=tried,
         )
 
@@ -1106,7 +1106,7 @@ class LLMGateway:
             self._notify_cb(
                 f'🚨 所有模型渠道都连不上了（最后一次错误：{error_code}）\n'
                 f'渠道：{names}\n'
-                + (detail or '歌伊暂时无法回复，恢复后会自动继续。可用「渠道状态」查看详情。')
+                + (detail or '伊菈暂时无法回复，恢复后会自动继续。可用「伊菈渠道」查看详情。')
             )
         except Exception:  # noqa: BLE001 - 通知失败不影响主流程
             logger.exception('通知骰主失败')
@@ -1224,7 +1224,7 @@ class LLMGateway:
         # 体检：顺手复位「比当前低、却还挂着不可用标签」的渠道。
         # 不复位的话标志会永远留着——真需要它兜底时会被排到更差的渠道后面，
         # 「按顺序往下开」就名不副实了。每轮最多查 probe_repair_per_round 个，
-        # 按上次探测时间从旧到新，**不切换渠道**。
+        # 按上次探测时间从旧到新，**不伊菈切换**。
         limit = max(0, int(cfg.get('probe_repair_per_round', 2) or 0))
         if limit:
             with self._lock:
@@ -1278,7 +1278,7 @@ class LLMGateway:
             self.store.set_setting(_KEY_UNHEALTHY, json.dumps(unhealthy, ensure_ascii=False))
             self.store.set_setting(_KEY_HISTORY, json.dumps(self._history, ensure_ascii=False))
         except Exception:  # noqa: BLE001 - 持久化失败不影响主流程
-            logger.exception('渠道状态持久化失败')
+            logger.exception('伊菈渠道持久化失败')
 
     def _apply_persisted_locked(self) -> None:
         """启动时恢复上次的当前渠道、手动锚点与不可用标记（失败不影响启动）。"""
@@ -1300,7 +1300,7 @@ class LLMGateway:
             state = next(st for p, st in self._pairs if p.name == hold)
             state.healthy = True
             state.fail_count = 0
-            logger.warning('已恢复「锁定兜底渠道」状态：%s（「切换渠道 X」可解除）', hold)
+            logger.warning('已恢复「锁定兜底渠道」状态：%s（「伊菈切换 X」可解除）', hold)
             return
         if anchor and anchor in names:
             self._anchor_name = anchor

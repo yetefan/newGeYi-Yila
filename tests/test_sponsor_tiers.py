@@ -196,7 +196,7 @@ class SponsorVisibilityTest(unittest.TestCase):
     """
 
     CONFIG = {
-        'triggers': ['歌伊'], 'worldbook_enabled': True, 'active_enabled': True,
+        'triggers': ['伊菈'], 'worldbook_enabled': True, 'active_enabled': True,
         'memory_curator_enabled': True, 'image_enabled': True, 'voice_enabled': True,
         'sponsor_tier1_ids': ['111'], 'sponsor_tier2_ids': ['222'],
         'private_daily_quota_sponsor_tier1': 100,
@@ -226,7 +226,7 @@ class SponsorVisibilityTest(unittest.TestCase):
         self.assertIn('赞助名单', self._router()._cmd_menu(None))
 
     def test_status_has_no_sponsor_content(self):
-        """歌伊状态同样一个字都不能提（这也是公开命令）。"""
+        """伊菈状态同样一个字都不能提（这也是公开命令）。"""
         router = self._router()
         router.r.store = _FakeStatsStore()
 
@@ -240,7 +240,7 @@ class SponsorVisibilityTest(unittest.TestCase):
             setattr(router.r, attr, None)
         text = router._cmd_status(Msg())
         for word in ('鸣谢', '一档', '二档', '赞助', '额度 100', '额度 120'):
-            self.assertNotIn(word, text, '歌伊状态里不该出现赞助内容：%s' % word)
+            self.assertNotIn(word, text, '伊菈状态里不该出现赞助内容：%s' % word)
 
     def test_sponsor_list_holds_everything(self):
         """反过来：档位、名额、额度、鸣谢文案都必须在这个命令里看得到。"""

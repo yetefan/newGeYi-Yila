@@ -532,7 +532,7 @@ class Panel:
                                 _HistoryPreview(history), images=None, renderer=self.runtime.renderer)
         builder.set_role_prompt(self.runtime.prompt_builder.role_prompt)
         messages = builder.build(msg, is_active=active)
-        directed = mentioned or any(word in text for word in (cfg['triggers'] or ['歌伊'])) or not is_group
+        directed = mentioned or any(word in text for word in (cfg['triggers'] or ['伊菈'])) or not is_group
         passive_allowed = (cfg['passive_enabled'] and self.runtime.store.get_setting('group_passive:' + key) != '0'
                            if is_group else cfg['private_enabled'])
         ignored = sender_id in [str(item) for item in cfg['ignore_sender_ids']]

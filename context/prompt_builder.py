@@ -341,7 +341,7 @@ class PromptBuilder:
 
         为什么必须有：图片在多模态请求里只能挂在**当前这条 user 消息**上，
         模型默认会认为「和这条消息一起给的图 = 发消息的人发的」。但回溯出来的图
-        可能来自别人、甚至来自歌伊自己发的立绘——实测她会把小明发的图认成小刚发的。
+        可能来自别人、甚至来自伊菈自己发的立绘——实测她会把小明发的图认成小刚发的。
 
         全部都是当前发言人自己发的就不加任何说明（自然读法本来就对，省 token）。
         """
@@ -389,7 +389,7 @@ class PromptBuilder:
         plan = (self.images.plan_for(msg) if self.images is not None
                 else {'urls': [], 'total': 0, 'skipped': 0})
 
-        system_parts = [self.role_prompt or '你是歌伊，一个可爱的AI助手。']
+        system_parts = [self.role_prompt or '你是伊菈，一个可爱的AI助手。']
         # 没人点名，要不要插一句由她判断。
         # 实测（影子模式跑真模型）：只写「没什么想说的就忽略」时她 4/4 都要说话——
         # 必须把「大多数消息不需要你出现」写成默认值，并给出具体的跳过情形。
@@ -432,7 +432,7 @@ class PromptBuilder:
             if bg:
                 system_parts.append('【本群背景（资料）】\n' + bg)
 
-        # 长期记忆：L2（关于说话人的事实）+ L3（歌伊自己的记忆）+ L1（群摘要）
+        # 长期记忆：L2（关于说话人的事实）+ L3（伊菈自己的记忆）+ L1（群摘要）
         if cfg.get('memory_enabled', True):
             policy = None
             if self.relationship is not None:
@@ -542,7 +542,7 @@ class PromptBuilder:
                     sanitize_user_text(content),
                 )
             else:
-                # 歌伊自己的历史回复也要剥离图片占位痕迹，防止模型模仿并输出裸【图片】
+                # 伊菈自己的历史回复也要剥离图片占位痕迹，防止模型模仿并输出裸【图片】
                 content = strip_image_marks(turn.get('content', ''))
                 if not content:
                     continue
@@ -560,7 +560,7 @@ class PromptBuilder:
             used += len(turn['content'])
         messages.extend(reversed(kept_reversed))
 
-        # 主动语音索求感知：对方明确希望歌伊发语音/说话
+        # 主动语音索求感知：对方明确希望伊菈发语音/说话
         is_voice_req = False
         v_mgr = getattr(self, 'voice_manager', None)
         if v_mgr is not None and getattr(v_mgr, 'enabled', False) and hasattr(v_mgr, 'is_user_requesting_voice'):
@@ -584,7 +584,7 @@ class PromptBuilder:
             current = f'{speaker}：{current}\n（这是私聊：只有你们两个人，群里其他人看不到这段对话）'
 
         if is_voice_req:
-            current += '\n（对方想听你的声音/希望你发语音，请在本轮回复末尾附带 [VOICE:情绪|简短日文] 伴生语音）'
+            current += '\n（对方想听你的声音/希望你发语音，请在本轮回复末尾附带 [VOICE:情绪|英文台词] 伴生语音（英文，5~15 个单词））'
         # 图片理解：图片只能放在 user 消息里（放进 system/assistant 会 400）。
         # 拿不到图（没开、下载失败、太大）就退回纯文本，不影响正常回复。
         if plan['urls']:

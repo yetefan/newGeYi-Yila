@@ -293,7 +293,7 @@ class PanelTest(unittest.TestCase):
             patch.object(self.runtime.router, 'route', side_effect=AssertionError('route')),
             patch.object(self.runtime.attention, 'evaluate', side_effect=AssertionError('gate')),
         ):
-            result = self.call('debug_preview', session_key=self.key, text='歌伊你好？', sender_id='42',
+            result = self.call('debug_preview', session_key=self.key, text='伊菈你好？', sender_id='42',
                                sender_name='测试者', is_group=True, mentioned_bot=False, is_active=False)
         self.assertTrue(result['ok'], result)
         self.assertEqual(result['data']['effects'], {'network': False, 'send': False, 'persist': False})
@@ -306,7 +306,7 @@ class PanelTest(unittest.TestCase):
 
     def test_preview_pointed_but_passive_off_is_ignored(self):
         self.runtime.store.set_setting('group_passive:' + self.key, '0')
-        result = self.call('debug_preview', session_key=self.key, text='歌伊', sender_id='42')
+        result = self.call('debug_preview', session_key=self.key, text='伊菈', sender_id='42')
         self.assertEqual(result['data']['route']['branch'], 'ignored')
         self.assertEqual(result['data']['route']['reason'], 'passive_disabled')
 

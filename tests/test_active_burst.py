@@ -21,7 +21,7 @@ os.environ.setdefault('GEYI_DATA_DIR', _SCRATCH)
 
 from newGeYi.models import IncomingMessage, ModelResult, SessionKey  # noqa: E402
 
-SKIP = '【歌伊忽略】'
+SKIP = '【伊菈忽略】'
 SESSION = SessionKey(bot_hash='hash', platform='qq', sdk='onebot',
                      session_type='group', host_id='-', target_id='20002')
 
@@ -57,7 +57,7 @@ class ActiveBurstTest(unittest.TestCase):
         from newGeYi.runtime.app import Runtime
 
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
         # 这一组用例断言的是"真的发出去了"，所以必须显式关掉影子模式。
         # 以前它靠插件目录里遗留的 config.json（active_shadow: false）兜着，
         # 一旦在**干净副本**（不含那个遗留文件）里跑，两个用例就会红——

@@ -45,7 +45,7 @@ REASONS = {
     'disabled': '主动搭话总开关关着',
     'group_off': '本群主动搭话关着',
     'quiet_hours': '安静时段',
-    'stopped': '连续没人接话太多次，已停止主动（发「本群主动开」可重置）',
+    'stopped': '连续没人接话太多次，已停止主动（发「伊菈主动开」可重置）',
     'backoff': '连续没人接话，冷却中',
     'daily_cap': '今天主动次数用完了',
     'budget': '今日调用总预算用完了',
@@ -663,7 +663,7 @@ class AttentionGate:
                           start_level=plan.start_level, levels=plan.levels)
 
     def gate_summary(self, session_key: str = '') -> dict:
-        """给「歌伊决策 / 歌伊状态」看：样本数、最近分数、闭环状态、今日过/拦。"""
+        """给「伊菈决策 / 伊菈状态」看：样本数、最近分数、闭环状态、今日过/拦。"""
         cfg = self.config
         if session_key:
             scores = list(self._recent_scores.get(session_key, ()))
@@ -753,7 +753,7 @@ class AttentionGate:
         self._add_deficit(session_key, self.deficit_lambda(session_key))
         self._roll_rate_window(session_key, msgs=1)
 
-        # 任何时候只要群里有针对歌伊的发言（被@ 或 触发词），立即解除退避与冷场惩罚！
+        # 任何时候只要群里有针对伊菈的发言（被@ 或 触发词），立即解除退避与冷场惩罚！
         if responded:
             self._set('active_nr', session_key, 0)
             self._set('active_backoff_until', session_key, 0)
@@ -766,7 +766,7 @@ class AttentionGate:
             except (TypeError, ValueError):
                 data = None
             if isinstance(data, dict):
-                # 记录歌伊主动发言后的群友后续消息条数
+                # 记录伊菈主动发言后的群友后续消息条数
                 data['msg_count'] = int(data.get('msg_count', 0)) + 1
                 # 只要有人接话，或者群里后续有至少 2 条消息（证明群活跃，没有冷场冷掉），即算成功响应
                 if responded or data['msg_count'] >= 2:
@@ -888,7 +888,7 @@ class AttentionGate:
         if until and until > now:
             lines.append('退避中，还需 %.1f 小时' % ((until - now) / 3600))
         if self._get_float('active_stopped', session_key):
-            lines.append('已停止主动（发「本群主动开」可重置）')
+            lines.append('已停止主动（发「伊菈主动开」可重置）')
         lines.append('')
         lines.append('近 %g 小时共记录 %d 条决策：' % (hours, stats['total']))
         action_label = {'blocked': '被闸门挡下', 'speak': '决定说话', 'observe': '看过没说'}

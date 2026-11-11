@@ -40,7 +40,7 @@ TOPIC_TOLD_KEEP = 40
 
 # ===== 轻微越界（2026-11-07 新增）=====
 # 数据背景：41 条扣分**全部**发生在 stage 0/1（允许 L1），其中 30 条是 L2——
-# 也就是「朋友间正常语气」（"你真可爱""给你比心""摸摸歌伊"）。全按越界扣分，
+# 也就是「朋友间正常语气」（"你真可爱""给你比心""摸摸伊菈"）。全按越界扣分，
 # 等于每个新用户第一句话就踩雷，而且他完全不知道自己踩了（阿P 连踩 17 次）。
 # 现在：只超前一点的（gap ≤ galgame_mild_gap）不扣分，改成「轻微反应」——
 # 让她下一轮有点被打扰到，但对话不断。
@@ -300,7 +300,7 @@ class RelationshipService:
         turns = self.store.recent_turns(session_key, limit=10)
         history = turns[:-2] if len(turns) >= 2 else []
         recent_users = [t['content'] for t in history if t.get('role') == 'user']
-        recent_lines = [('对方：' if t.get('role') == 'user' else '歌伊：') + str(t.get('content'))[:120]
+        recent_lines = [('对方：' if t.get('role') == 'user' else '伊菈：') + str(t.get('content'))[:120]
                         for t in history[-6:]]
 
         with self._lock_for(uid):
@@ -427,7 +427,7 @@ class RelationshipService:
         except Exception:  # noqa: BLE001
             return ''
         text = (f'【关系阶段】你和这位对方（私聊）目前处于「{STAGE_NAMES[rel.stage]}」阶段。'
-                '写他的印象时，用歌伊的主观视角，亲疏程度不得超过这个阶段'
+                '写他的印象时，用伊菈的主观视角，亲疏程度不得超过这个阶段'
                 '（陌生/熟人阶段只能写成"还不太了解的人"，不要写出亲近、依赖、喜欢）。\n')
         if rel.flags.get('impression_dirty'):
             text += ('你们的关系刚刚进入新的阶段：即使这批聊天没有新内容，也请为他输出一条'

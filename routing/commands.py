@@ -28,6 +28,21 @@ def _mask_key(key: str) -> str:
     return key[:4] + '****' + key[-4:]
 
 
+# 「忘记」后面只能是编号和分隔符。否则「伊菈忘记告诉你了」也会被当成删除命令。
+_FORGET_NUMBERS = re.compile(r'^忘记(?:[\s,，、]*\d+)*$')
+
+
+def _recorded_at(stamp) -> str:
+    """记忆写入时间，只给卡片上的小字用，格式 11-09 21:16。"""
+    try:
+        value = int(stamp or 0)
+    except (TypeError, ValueError):
+        return ''
+    if value <= 0:
+        return ''
+    return time.strftime('%m-%d %H:%M', time.localtime(value))
+
+
 # 用量拆账用的中文标签（kind 是网关口径，别在别处再写一遍字面量）
 KIND_LABELS = {
     'gate': '搭话判断',
@@ -51,8 +66,13 @@ def fmt_tokens(value) -> str:
 
 
 class CommandRouter:
+    # 「伊菈记忆」发出去的编号只在这一页里有效。过期后必须再看一次，
+    # 避免中途新记了一条、原来的 3 已经变成别的内容。
+    _MEMORY_PAGE_TTL = 30 * 60
+
     def __init__(self, runtime):
         self.r = runtime
+        self._memory_pages = {}
 
     # ------------- 公共 -------------
     def _save_and_reload(self, changes: dict | None = None) -> None:
@@ -89,33 +109,34 @@ class CommandRouter:
         gateway = getattr(self.r, 'gateway', None)
         channel = gateway.current_summary() if gateway is not None else '未配置'
         lines = [
-            f'--- 歌伊菜单 v{plugin_config.PLUGIN_VERSION} ---',
+            '--- 伊菈菜单 ---',
             '',
-            '[状态] 歌伊状态 | 今日用量',
-            '[对话] 我的记忆 / 查看记忆 | 忘了我',
-            '[世界书] 世界书状态',
-            '[私聊] 关系（看看她现在怎么看你）',
+            '[状态] 伊菈状态 | 伊菈用量',
+            '[对话] 伊菈记忆 | 伊菈忘记 <编号> | 伊菈忘了我',
+            '[世界书] 伊菈世界书状态 | 伊菈查看触发词',
+            '[私聊] 伊菈关系（看看她现在怎么看你）',
             '',
-            '[骰主/主人] 渠道状态 | 切换渠道 <名称/序号> | 切换渠道 自动',
-            '[骰主/主人] 解除静默 [号码]（私聊退场是无限期，只能手动放） | 静默列表',
-            '[骰主/主人] 面板地址（本机网页调试台，核心无 OlivOS WebUI 时用这个）',
-            '[骰主/主人] 测试通知',
-            '[骰主/主人] 记忆状态 | 导出记忆',
-            '[骰主/主人] 全局被动开/关 | 开启/关闭私聊',
-            '[骰主/主人] 主动搭话开/关（全局） | 搭话观察 | 搭话影子开/关',
-            '[骰主/主人] 设置key <API Key> | 重置上下文 | 重载设定',
-            '[骰主/主人] 添加/删除触发词 <词> | 查看触发词',
-            '[骰主/主人] 世界书开/关 | 世界书重载',
-            '[骰主/主人] 好感度开/关 | 好感度影子开/关 | 关系详情 <QQ> | 关系设置 <QQ> <0-5> | 关系重置 <QQ>',
-            '[骰主/主人] 私聊用量（今日额度与触发词模式） | 私聊触发词开/关',
-            '[骰主/主人] 赞助名单 | 赞助加 <QQ> [1/2] | 赞助删 <QQ>',
-            '[骰主/主人] 休眠状态 | 休眠开/关 | 休眠时间 <HH:MM-HH:MM> | 休眠重置',
-            '[骰主/主人] 图片理解开/关',
-            '[骰主/主人] 表情包状态 | 开启/关闭表情包 | 加载表情包 <路径> | 表情包重载',
-            '[骰主/主人] 语音状态 | 测试语音 [情绪] [日文] | 开启/关闭语音 | 语音重载',
+            '[骰主/主人] 伊菈渠道 | 伊菈切换 <名称/序号> | 伊菈切换 自动',
+            '[骰主/主人] 伊菈解除静默 [号码] | 伊菈静默列表',
+            '[骰主/主人] 伊菈面板（本机网页调试台，核心无 OlivOS WebUI 时用这个）',
+            '[骰主/主人] 伊菈测试通知',
+            '[骰主/主人] 伊菈记忆状态 | 伊菈导出记忆',
+            '[骰主/主人] 伊菈全局被动开 | 伊菈全局被动关 | 伊菈开启私聊 | 伊菈关闭私聊',
+            '[骰主/主人] 伊菈主动搭话开/关 | 伊菈搭话观察 | 伊菈搭话影子开/关',
+            '[骰主/主人] 伊菈设置key <API Key> | 伊菈重置上下文 | 伊菈重载设定',
+            '[骰主/主人] 伊菈添加触发词 <词> | 伊菈删除触发词 <词> | 伊菈查看触发词',
+            '[骰主/主人] 伊菈世界书开/关 | 伊菈世界书重载',
+            '[骰主/主人] 伊菈好感度开/关 | 伊菈好感度影子开/关 | 伊菈关系详情 <QQ> | 伊菈关系设置 <QQ> <0-5> | 伊菈关系重置 <QQ>',
+            '[骰主/主人] 伊菈私聊用量 | 伊菈私聊触发词开/关',
+            '[骰主/主人] 伊菈赞助名单 | 伊菈赞助加 <QQ> [1/2] | 伊菈赞助删 <QQ>',
+            '[骰主/主人] 伊菈休眠状态 | 伊菈休眠开/关 | 伊菈休眠时间 <HH:MM-HH:MM> | 伊菈休眠重置',
+            '[骰主/主人] 伊菈图片理解开/关',
+            '[骰主/主人] 伊菈自动好友开/关 | 伊菈自动好友状态 | 伊菈自动好友检查',
+            '[骰主/主人] 伊菈表情包状态 | 伊菈开启表情包 | 伊菈关闭表情包 | 伊菈加载表情包 <路径> | 伊菈表情包重载',
+            '[骰主/主人] 伊菈语音状态 | 伊菈测试语音 [情绪] [台词] | 伊菈开启语音 | 伊菈关闭语音 | 伊菈语音重载',
             '',
-            '[群管/主人] 本群被动开/关 | 本群主动开/关',
-            '[群管/主人] 设置群背景 <文本> | 查看群背景',
+            '[群管/主人] 伊菈被动开/关 | 伊菈主动开/关',
+            '[群管/主人] 伊菈设置群背景 <文本> | 伊菈群背景',
             '',
             f'当前渠道: {channel}',
             f'世界书: {wb_state} | 主动搭话: {active_state} | 自动记忆: {memory_state}',
@@ -126,6 +147,87 @@ class CommandRouter:
         # 公开命令里一旦出现档位、人数、额度或鸣谢，效果都只有两个：
         # 看起来像在卖服务，以及招来「凭什么他有 100 我只有 60」。
         return '\n'.join(lines)
+
+    def _menu_states(self) -> dict:
+        """菜单图右上角的状态灯。主动搭话有「影子」这种第三态，单独算。"""
+        cfg = self.r.config
+        active = '开' if cfg.get('active_enabled') else '关'
+        if cfg.get('active_enabled') and cfg.get('active_shadow', True):
+            active = '影子'
+        return {
+            'worldbook': '开' if cfg.get('worldbook_enabled') else '关',
+            'memory': '开' if cfg.get('memory_curator_enabled', True) else '关',
+            'active': active,
+            'image': '开' if cfg.get('image_enabled', True) else '关',
+            'voice': '开' if cfg.get('voice_enabled', True) else '关',
+        }
+
+    def _menu_channel(self) -> str:
+        gateway = getattr(self.r, 'gateway', None)
+        return gateway.current_summary() if gateway is not None else '未配置'
+
+    def menu_image(self) -> str:
+        """菜单图片的可发送 CQ 码。画不出来返回空串，调用方改发 _cmd_menu 的文字。
+
+        图每次现画：渠道和开关状态是实时的，缓存会显示过期内容。
+        文件放 state 目录（plugin/data/newGeYi/），不放会被 OlivOS 清空的资源目录。
+        """
+        try:
+            from ..presentation.menu_card import render_menu_card
+            from ..presentation.renderer import SEND_IMAGE
+
+            path = render_menu_card(
+                self._menu_channel(), self._menu_states(),
+                plugin_config.get_state_dir() / 'menu-card.png')
+        except Exception:  # noqa: BLE001 - 画图是附加效果，失败不能让菜单没反应
+            logger.exception('菜单图生成失败，改发文字')
+            return ''
+        if not path:
+            return ''
+        return SEND_IMAGE % ('file:///' + path.replace('\\', '/'))
+
+    def send_menu(self, msg: IncomingMessage) -> None:
+        """先尝试发图；没有图（缺字体/画图库/出错）就发原来的文字菜单。"""
+        image = self.menu_image()
+        self.r.reply(msg, image or self._cmd_menu(msg))
+
+    def reply_card(self, msg: IncomingMessage, text: str) -> None:
+        """长报告优先发成卡片；一两行、太长、或画不出来时，原样发文字。
+
+        只用于「看一眼」的报告。要复制的内容（面板地址、导出路径、密钥回执）别走这里。
+        """
+        image = self._report_image(text)
+        self.r.reply(msg, image or text)
+
+    def _report_image(self, text: str) -> str:
+        body = str(text or '').strip()
+        if body.count('\n') < 2:
+            return ''
+        try:
+            from ..presentation.renderer import SEND_IMAGE
+            from ..presentation.report_card import render_report
+
+            folder = plugin_config.get_state_dir()
+            path = render_report(body, folder / ('report-%d.png' % int(time.time() * 1000)),
+                                 getattr(self, '_card_notes', None))
+            self._card_notes = None
+            self._trim_reports(folder)
+        except Exception:  # noqa: BLE001 - 画图失败不能让命令没反应
+            logger.exception('报告图生成失败，改发文字')
+            return ''
+        if not path:
+            return ''
+        return SEND_IMAGE % ('file:///' + path.replace('\\', '/'))
+
+    @staticmethod
+    def _trim_reports(folder) -> None:
+        """只留最近几张。发出去的图还要等协议端来取，不能刚画完就删。"""
+        try:
+            files = sorted(folder.glob('report-*.png'), key=lambda item: item.stat().st_mtime)
+            for old in files[:-8]:
+                old.unlink()
+        except OSError:
+            logger.debug('清理旧报告图失败', exc_info=True)
 
     def _cmd_status(self, msg: IncomingMessage) -> str:
         cfg = self.r.config
@@ -198,7 +300,7 @@ class CommandRouter:
         except Exception:  # noqa: BLE001
             queue_line = '队列: 读取失败'
         return '\n'.join([
-            f'--- 歌伊状态 v{plugin_config.PLUGIN_VERSION} ---',
+            '--- 伊菈状态 ---',
             key_line,
             f'当前渠道: {channel}',
             f'私聊: {state["private"]} | 被动: {state["passive"]} | 主动: {state["active"]}',
@@ -211,7 +313,7 @@ class CommandRouter:
             queue_line,
             self._token_line(today),
             f'今日调用: {today["calls"]}/{budget} | 主动搭话: {today["active_calls"]} 次',
-            f'触发词: {", ".join(cfg.get("triggers", [])) or "歌伊"}',
+            f'触发词: {", ".join(cfg.get("triggers", [])) or "伊菈"}',
         ])
 
     def _token_line(self, today: dict) -> str:
@@ -238,7 +340,7 @@ class CommandRouter:
         owners = sorted(self.r.permissions._owner_set())
         ok = notify(
             '🔔 这是一条测试通知\n'
-            '如果你看到这句话，说明歌伊的骰主私聊通道是通的——'
+            '如果你看到这句话，说明伊菈的骰主私聊通道是通的——'
             '「自我保护静默」「所有模型渠道都挂了」都会用这条通道通知你。'
         )
         who = '、'.join(owners) if owners else '（未配置任何骰主）'
@@ -314,9 +416,9 @@ class CommandRouter:
         url = getattr(server, 'url', '')
         if not url:
             return '本地面板未启动（端口可能被占用，改 config.json 的 panel_local_port 或设 0）'
-        return (f'🖥 歌伊调试台（只监听本机）\n{url}\n'
+        return (f'🖥 伊菈调试台（只监听本机）\n{url}\n'
                 f'直接粘到本机浏览器打开；换端口改 panel_local_port，关掉改 panel_local_enabled=false。\n'
-                f'如果核心是 OlivOS 1.0.x，优先用原生「插件页面 → 歌伊调试台」。')
+                f'如果核心是 OlivOS 1.0.x，优先用原生「插件页面 → 伊菈调试台」。')
 
     def _cmd_clear_rest(self, msg: IncomingMessage) -> str:
         """提前解除本会话的自我保护静默（骰主专用）。
@@ -372,9 +474,9 @@ class CommandRouter:
             return '网关未初始化'
         arg = arg.strip()
         if not arg:
-            return ('格式: 切换渠道 <渠道名或序号>\n'
+            return ('格式: 伊菈切换 <渠道名或序号>\n'
                     '手动切换会把它设为「锚点」：故障时只在它以下的渠道里找备份，'
-                    '恢复也只回到这里。发「切换渠道 自动」取消锚点。')
+                    '恢复也只回到这里。发「伊菈切换 自动」取消锚点。')
         return gateway.switch_to(arg)
 
     def _cmd_usage(self, msg: IncomingMessage) -> str:
@@ -531,10 +633,10 @@ class CommandRouter:
 
     def _cmd_remember(self, msg: IncomingMessage, arg: str) -> str:
         # 墓碑：显式「记住 xxx」已被废除，避免提示词注入与越狱投毒风险。
-        return '现在不用专门喊「记住」啦，平时正常和我聊天我就会自然记住你的习惯和爱好哦～（发送「我的记忆」可查看）'
+        return '现在不用专门喊「记住」啦，平时正常和我聊天我就会自然记住你的习惯和爱好哦～（发送「伊菈记忆」可查看）'
 
     def _cmd_view_my_memory(self, msg: IncomingMessage) -> str:
-        """查看歌伊对当前用户的记忆与印象。"""
+        """查看伊菈对当前用户的记忆与印象。"""
         uid = str(getattr(msg, 'sender_id', '') or '').strip()
         if not uid:
             return '唔……未能获取到你的账号信息哦。'
@@ -559,7 +661,7 @@ class CommandRouter:
                     versions = len(self.r.store.impression_history(uid, scope=primary_scope, limit=200))
                     meta = f'（{relative_time(stamp)}更新' + (f'，共 {versions} 版）' if versions > 1 else '）') if stamp else ''
                     tag = '群聊印象' if is_group else '私聊印象'
-                    imp_parts.append(f'🌟 歌伊对你的{tag}{meta}：\n  {text}')
+                    imp_parts.append(f'🌟 伊菈对你的{tag}{meta}：\n  {text}')
 
                 if cross_enabled:
                     cross_scope = 'private' if is_group else 'group'
@@ -570,7 +672,7 @@ class CommandRouter:
                         c_versions = len(self.r.store.impression_history(uid, scope=cross_scope, limit=200))
                         c_meta = f'（{relative_time(c_stamp)}更新' + (f'，共 {c_versions} 版）' if c_versions > 1 else '）') if c_stamp else ''
                         c_tag = '私聊印象（互通）' if is_group else '群聊印象（互通）'
-                        imp_parts.append(f'🌟 歌伊对你的{c_tag}{c_meta}：\n  {c_text}')
+                        imp_parts.append(f'🌟 伊菈对你的{c_tag}{c_meta}：\n  {c_text}')
 
                 if imp_parts:
                     impression_text = '\n'.join(imp_parts)
@@ -578,38 +680,108 @@ class CommandRouter:
                 pass
 
         # 2. 查找事实（包含当前会话事实与跨群全局偏好，按互通开关召回）
-        facts: list[str] = []
+        numbered: list[tuple[int, str, str]] = []
         try:
             include_global = self.r.config.get('memory_cross_group_enabled', True)
             rows = self.r.store.list_user_facts(
-                session_key, uid, limit=20, include_global=include_global,
+                session_key, uid, limit=21, include_global=include_global,
                 cross_scope=cross_enabled,
             )
             seen = set()
-            for r in rows:
-                f = str(r.get('fact') or '').strip()
-                if f and f not in seen:
-                    seen.add(f)
-                    facts.append(f)
+            for row in rows:
+                fact = str(row.get('fact') or '').strip()
+                fact_id = int(row.get('id') or 0)
+                if fact and fact_id and fact not in seen:
+                    seen.add(fact)
+                    numbered.append((fact_id, fact, _recorded_at(row.get('created_at'))))
         except Exception:
-            pass
+            logger.exception('读取记忆列表失败')
 
-        if not impression_text and not facts:
-            return '唔……歌伊的小本本上关于你还是一片空白呢～\n平时多和我聊聊天，我就会自然记住你的习惯和爱好啦！（眨眼）'
+        more = len(numbered) > 20
+        if more:
+            numbered = numbered[:20]
+        self._memory_pages.pop(self._memory_page_key(msg), None)
+        if not impression_text and not numbered:
+            return '唔……伊菈的小本本上关于你还是一片空白呢～\n平时多和我聊聊天，我就会自然记住你的习惯和爱好啦！（眨眼）'
 
-        lines = ['【歌伊的小本本 · 记忆档案】']
+        if numbered:
+            self._remember_memory_page(msg, [(fact_id, fact) for fact_id, fact, _stamp in numbered])
+        who = str(getattr(msg, 'sender_name', '') or '').strip() or uid
+        lines = ['【伊菈的小本本 · 记忆档案】', '这份记忆属于：%s（%s）' % (who, uid)]
         if impression_text:
             lines.append(impression_text)
-        if facts:
-            lines.append(f'📝 记住的事（共 {len(facts)} 条）：')
-            for f in facts:
-                lines.append(f'  · {f}')
-        lines.append('💡 提示：发送「忘了我」可以随时清空关于你的这些记录哦～')
+        notes = {}
+        if numbered:
+            head = '这一页 20 条，后面还有' if more else f'共 {len(numbered)} 条'
+            lines.append(f'📝 记住的事（{head}）：')
+            for index, (_fact_id, fact, stamp) in enumerate(numbered, start=1):
+                line = f'  {index}. {fact}'
+                lines.append(line)
+                if stamp:
+                    # 只画在图上。文字回复里没有这行，所以不会进对话记录。
+                    notes[line] = '记录于 %s' % stamp
+            lines.append('删一条发「伊菈忘记 编号」，比如「伊菈忘记 2」。')
+            lines.append('一次删几条用空格隔开，比如「伊菈忘记 1 3」。编号半小时内有效。')
+            if more:
+                lines.append('这一页只显示 20 条。删掉一些后再发「伊菈记忆」，就能看到后面的。')
+        lines.append('全部清空仍然是「伊菈忘了我」。')
+        self._card_notes = notes
+        return '\n'.join(lines)
+
+    @staticmethod
+    def _memory_page_key(msg: IncomingMessage) -> str:
+        return '%s|%s' % (getattr(msg, 'sender_id', ''), msg.session.as_text())
+
+    def _remember_memory_page(self, msg: IncomingMessage, numbered: list[tuple[int, str]]) -> None:
+        self._memory_pages[self._memory_page_key(msg)] = (time.time(), list(numbered))
+
+    def _memory_page(self, msg: IncomingMessage) -> list[tuple[int, str]] | None:
+        item = self._memory_pages.get(self._memory_page_key(msg))
+        if not item:
+            return None
+        stamp, numbered = item
+        if time.time() - stamp > self._MEMORY_PAGE_TTL:
+            self._memory_pages.pop(self._memory_page_key(msg), None)
+            return None
+        return numbered
+
+    def _cmd_forget_numbered(self, msg: IncomingMessage, raw: str) -> str:
+        """按「伊菈记忆」里看到的编号删，不按数据库内部编号。"""
+        wanted = [int(piece) for piece in re.findall(r'\d+', raw or '')]
+        if not wanted:
+            return '格式：伊菈忘记 2\n一次删几条：伊菈忘记 1 3\n编号在「伊菈记忆」里面。'
+        page = self._memory_page(msg)
+        if not page:
+            return '还没有可用的编号。先发一次「伊菈记忆」，再按那一页上的数字删。'
+        removed = []
+        missing = []
+        seen = set()
+        for number in wanted:
+            if number in seen:
+                continue
+            seen.add(number)
+            if number < 1 or number > len(page):
+                missing.append(str(number))
+                continue
+            fact_id, fact = page[number - 1]
+            text = self.r.store.expire_owned_user_fact(fact_id, msg.sender_id)
+            if text is None:
+                missing.append(str(number))
+                continue
+            removed.append((number, text or fact))
+        lines = []
+        if removed:
+            lines.append('✅ 忘掉了 %d 条：' % len(removed))
+            lines.extend('  %d. %s' % (number, text) for number, text in removed)
+            lines.append('剩下的编号没有变，想再删可以接着发。')
+        if missing:
+            lines.append('这些编号对不上：%s。先发「伊菈记忆」看现在的编号。' % '、'.join(missing))
         return '\n'.join(lines)
 
     def _cmd_forget_me(self, msg: IncomingMessage) -> str:
         # 连**全局范围**的事实一起清（跨群偏好存在 session_key='global' 里），
         # 否则换个群她还记得你（2026-11-03 审查发现）。
+        self._memory_pages.pop(self._memory_page_key(msg), None)
         count = self.r.memory.clear_user(msg)
         relationship = getattr(self.r, 'relationship', None)
         if relationship is not None:
@@ -655,7 +827,7 @@ class CommandRouter:
         return '用法：关系详情 <QQ> | 关系设置 <QQ> <0-5> | 关系重置 <QQ>'
 
     # ------------- 主人 -------------
-    # 「切换模型」已删除：早期「智慧歌伊模式」的快速/推理双模型早就名存实亡，
+    # 「切换模型」已删除：早期「智慧伊菈模式」的快速/推理双模型早就名存实亡，
     # 现在模型由渠道决定（掉线时在渠道间按稳定性切换），模型池与它对不上了。
 
     def _cmd_global_passive(self, msg: IncomingMessage, on: bool) -> str:
@@ -708,7 +880,7 @@ class CommandRouter:
             return '格式: 删除触发词 <词>'
         triggers = [t for t in self.r.config.get('triggers', []) if t != arg]
         self._save_and_reload({'triggers': triggers})
-        return f'✅ 触发词: {", ".join(triggers) or "（仅剩默认「歌伊」）"}'
+        return f'✅ 触发词: {", ".join(triggers) or "（仅剩默认「伊菈」）"}'
 
     def _cmd_worldbook_toggle(self, msg: IncomingMessage, on: bool) -> str:
         self._save_and_reload({'worldbook_enabled': on})
@@ -729,6 +901,43 @@ class CommandRouter:
         if images is not None:
             images.config = self.r.config
         return '✅ 已开启图片理解（群里发图她会看）' if on else '🔕 已关闭图片理解（图片只留占位符，省 token）'
+
+    # ------------- 自动同意好友 -------------
+    def _cmd_friend_auto_toggle(self, msg: IncomingMessage, on: bool) -> str:
+        cfg = self.r.config
+        if on and not str(cfg.get('llbot_webui_token') or '').strip():
+            return ('先填 LLBot 的网页密码再开：面板改 llbot_webui_token，'
+                    '或 config.json 里写 llbot_webui_token（默认 123456）。')
+        self._save_and_reload({'friend_auto_accept': on})
+        acceptor = getattr(self.r, 'friend_accept', None)
+        if acceptor is not None:
+            acceptor.config = self.r.config
+        if not on:
+            return '🔕 已关闭自动同意好友'
+        return ('✅ 已开启自动同意好友：每 %d 秒问一次 LLBot，只同意普通申请。\n'
+                '被 QQ 判成风险账号的那份仍然要手动点。' % int(acceptor._interval() if acceptor else 120))
+
+    def _cmd_friend_auto_status(self, msg: IncomingMessage) -> str:
+        acceptor = getattr(self.r, 'friend_accept', None)
+        if acceptor is None:
+            return '自动同意好友模块未初始化'
+        acceptor.config = self.r.config
+        return acceptor.status_text()
+
+    def _cmd_friend_auto_check(self, msg: IncomingMessage) -> str:
+        acceptor = getattr(self.r, 'friend_accept', None)
+        if acceptor is None:
+            return '自动同意好友模块未初始化'
+        acceptor.config = self.r.config
+        try:
+            approved = acceptor.run_once()
+        except Exception as exc:  # noqa: BLE001 - 检查失败要说清楚原因
+            return '❌ 检查失败：%s: %s\n（确认 LLBot 在跑、llbot_webui_url 和密码对不对）' % (
+                type(exc).__name__, exc)
+        if not approved:
+            return '这一轮没有待同意的普通好友申请。'
+        names = '、'.join('%s(%s)' % (item['nick'] or '未知', item['uin'] or '?') for item in approved)
+        return '✅ 已同意 %d 人：%s' % (len(approved), names)
 
     def _cmd_export_memory(self, msg: IncomingMessage) -> str:
         """导出四层记忆：一份人可读的文本 + 一个自洽的数据库快照。
@@ -902,15 +1111,16 @@ class CommandRouter:
         '图片理解开', '图片理解关',
         '语音状态', '开启语音', '关闭语音', '语音重载', '测试语音',
         '.voice status', '.voice test',
-        '渠道状态', '记忆状态', '导出记忆', '搭话观察',
+        '渠道', '记忆状态', '导出记忆', '搭话观察',
         '赞助名单',
         '解除静默', '解除本群静默', '静默列表', '测试通知', '通知测试',
-        '面板地址', '歌伊面板', '调试台',
+        '面板',
+        '自动好友开', '自动好友关', '自动好友状态', '自动好友检查',
         '搭话影子开', '搭话影子关',
         '切换模型',
     }
     _OWNER_CMD_PREFIX = (
-        '添加触发词 ', '删除触发词 ', '加载立绘 ', '加载表情包 ', '设置key ', '切换渠道 ', '切换模型 ',
+        '添加触发词 ', '删除触发词 ', '加载立绘 ', '加载表情包 ', '设置key ', '切换 ', '切换模型 ',
         '测试语音 ', '.voice test ', '解除静默 ',
         '关系详情 ', '关系设置 ', '关系重置 ',
         '赞助加 ', '赞助删 ',
@@ -940,16 +1150,38 @@ class CommandRouter:
         if not text:
             return False
 
+        # 「伊菈」命令前缀：**必须以「伊菈」开头才算命令**（英文点命令如 .voice 除外）。
+        # 裸写法（我的记忆 / 忘了我 / 菜单 …）一律走聊天流程，避免群友随口一句就被当命令。
+        # 群里先 @她 再发命令同样算数：@ 会被折成「@昵称」，这里先把开头的 @ 剥掉。
+        raw_text = text
+        prefixed = False
+        probe = text
+        while probe.startswith('@'):
+            stripped = re.sub(r'^@\S+\s*', '', probe)
+            if stripped == probe:
+                break
+            probe = stripped
+        if getattr(msg, 'mentioned_bot', False):
+            prefixed = True
+            text = probe or text
+        if text.startswith('伊菈') and len(text) > 2:
+            prefixed = True
+            text = text[2:].lstrip() or text
+
         # B站漫游专属指令互斥拦截：交由附属插件处理，本体直接让出不回复
         # 核心防误判：如果含有视频链接、卡片或BV号，说明是视频分享，必须由本体回复，不得拦截
-        is_video_share = bool(re.search(r'(?:BV[0-9A-Za-z]{10}|b23\.tv|bilibili\.com)', text, re.I))
+        is_video_share = bool(re.search(r'(?:BV[0-9A-Za-z]{10}|b23\.tv|bilibili\.com)', raw_text, re.I))
         if not is_video_share:
             v_ctx = getattr(self.r, 'video_context', None)
-            if v_ctx is not None and hasattr(v_ctx, 'is_wander_command') and v_ctx.is_wander_command(text):
+            if v_ctx is not None and hasattr(v_ctx, 'is_wander_command') and v_ctx.is_wander_command(raw_text):
                 return True
-            triggers = ('.bili wander', '歌伊刷个视频', '歌伊看个视频', '歌伊看视频', '歌伊随机看个视频', '歌伊去刷b站', '歌伊去刷会儿b站', '歌伊看b站', '歌伊去摸鱼', '歌伊摸鱼')
-            if any(cmd in text.lower() for cmd in triggers):
+            triggers = ('.bili wander', '伊菈刷个视频', '伊菈看个视频', '伊菈看视频', '伊菈随机看个视频', '伊菈去刷b站', '伊菈去刷会儿b站', '伊菈看b站', '伊菈去摸鱼', '伊菈摸鱼')
+            if any(cmd in raw_text.lower() for cmd in triggers):
                 return True
+
+        # 没带「伊菈」前缀、也不是点命令 → 不做任何命令匹配，直接交给聊天
+        if not prefixed and not raw_text.startswith('.'):
+            return False
 
         p = self.r.permissions
         deny = '这个只有骰主或主人能用哦~'
@@ -961,25 +1193,28 @@ class CommandRouter:
             return True
 
         # 公共命令
-        if text == '歌伊菜单':
-            self.r.reply(msg, self._cmd_menu(msg))
+        if text == '菜单':
+            self.send_menu(msg)
             return True
-        if text in ('歌伊状态', '查看状态'):
-            self.r.reply(msg, self._cmd_status(msg))
+        if text == '状态':
+            self.reply_card(msg, self._cmd_status(msg))
             return True
-        if text == '今日用量':
-            self.r.reply(msg, self._cmd_usage(msg))
+        if text == '用量':
+            self.reply_card(msg, self._cmd_usage(msg))
             return True
         if text.startswith('记住 '):
             self.r.reply(msg, self._cmd_remember(msg, text[3:]))
             return True
-        if text in ('我的记忆', '查看记忆', '歌伊看我'):
-            self.r.reply(msg, self._cmd_view_my_memory(msg))
+        if text == '记忆':
+            self.reply_card(msg, self._cmd_view_my_memory(msg))
+            return True
+        if _FORGET_NUMBERS.match(text):
+            self.r.reply(msg, self._cmd_forget_numbered(msg, text[len('忘记'):].strip()))
             return True
         if text == '忘了我':
             self.r.reply(msg, self._cmd_forget_me(msg))
             return True
-        if text in ('关系', '好感度'):
+        if text == '关系':
             self.r.reply(msg, self._cmd_relation(msg))
             return True
         if text == '世界书状态':
@@ -991,16 +1226,16 @@ class CommandRouter:
 
         # 群管理员命令（主人或群管）：必须在「非主人早退」之前判断，
         # 否则非主人的群管永远走不到这里
-        if (text in ('本群被动开', '本群被动关', '本群主动开', '本群主动关')
-                or text == '查看群背景' or text.startswith('设置群背景 ')):
+        if (text in ('被动开', '被动关', '主动开', '主动关')
+                or text == '群背景' or text.startswith('设置群背景 ')):
             if not (is_master or p.is_group_admin(msg)):
                 self.r.reply(msg, deny)
                 return True
-            if text in ('本群被动开', '本群被动关'):
+            if text in ('被动开', '被动关'):
                 self.r.reply(msg, self._cmd_group_passive(msg, text.endswith('开')))
-            elif text in ('本群主动开', '本群主动关'):
+            elif text in ('主动开', '主动关'):
                 self.r.reply(msg, self._cmd_group_active(msg, text.endswith('开')))
-            elif text == '查看群背景':
+            elif text == '群背景':
                 self.r.reply(msg, self._cmd_group_background_view(msg))
             else:
                 self.r.reply(msg, self._cmd_group_background_set(msg, text[6:]))
@@ -1012,14 +1247,14 @@ class CommandRouter:
         if text == '切换模型' or text.startswith('切换模型 '):
             # 墓碑：这指令删了，但主人多半会照着旧习惯敲一次——
             # 落到聊天流程里她会用角色口吻答一句莫名其妙的话，不如直接说清楚
-            self.r.reply(msg, '「切换模型」已经删掉啦（早期智慧歌伊模式的残留）。\n'
-                              '现在模型由渠道决定：发「渠道状态」看列表、「切换渠道 <名称/序号>」手动切。')
+            self.r.reply(msg, '「切换模型」已经删掉啦（早期智慧伊菈模式的残留）。\n'
+                              '现在模型由渠道决定：发「伊菈渠道」看列表、「伊菈切换 <名称/序号>」手动切。')
             return True
-        if text == '渠道状态':
-            self.r.reply(msg, self._cmd_channels(msg))
+        if text == '渠道':
+            self.reply_card(msg, self._cmd_channels(msg))
             return True
         if text == '赞助名单':
-            self.r.reply(msg, self._cmd_sponsor_list(msg))
+            self.reply_card(msg, self._cmd_sponsor_list(msg))
             return True
         if text.startswith('赞助加 '):
             self.r.reply(msg, self._cmd_sponsor_add(msg, text[4:]))
@@ -1033,7 +1268,7 @@ class CommandRouter:
                 self.r.reply(msg, '私聊闸门还没初始化（重载一次试试）。')
             else:
                 key = msg.session.as_text() if not msg.is_group else ''
-                self.r.reply(msg, '【私聊并发保护】\n' + gate.usage_text(key))
+                self.reply_card(msg, '【私聊并发保护】\n' + gate.usage_text(key))
             return True
         if text in ('私聊触发词开', '私聊触发词关'):
             on = text.endswith('开')
@@ -1048,7 +1283,7 @@ class CommandRouter:
             if sleep is None:
                 self.r.reply(msg, '作息模块还没初始化（重载一次试试）。')
             else:
-                self.r.reply(msg, '【作息】\n' + sleep.status_text())
+                self.reply_card(msg, '【作息】\n' + sleep.status_text())
             return True
         if text in ('休眠开', '休眠关'):
             on = text.endswith('开')
@@ -1087,22 +1322,22 @@ class CommandRouter:
             self.r.reply(msg, self._cmd_clear_rest(msg))
             return True
         if text == '静默列表':
-            self.r.reply(msg, self._cmd_rest_list(msg))
+            self.reply_card(msg, self._cmd_rest_list(msg))
             return True
-        if text in ('面板地址', '歌伊面板', '调试台'):
+        if text == '面板':
             self.r.reply(msg, self._cmd_panel_url(msg))
             return True
         if text in ('测试通知', '通知测试'):
             self.r.reply(msg, self._cmd_test_notify(msg))
             return True
         if text == '记忆状态':
-            self.r.reply(msg, self._cmd_memory_status(msg))
+            self.reply_card(msg, self._cmd_memory_status(msg))
             return True
         if text == '导出记忆':
             self.r.reply(msg, self._cmd_export_memory(msg))
             return True
         if text == '搭话观察':
-            self.r.reply(msg, self._cmd_active_observe(msg))
+            self.reply_card(msg, self._cmd_active_observe(msg))
             return True
         if text == '搭话影子开':
             self.r.reply(msg, self._cmd_active_shadow(msg, True))
@@ -1110,8 +1345,8 @@ class CommandRouter:
         if text == '搭话影子关':
             self.r.reply(msg, self._cmd_active_shadow(msg, False))
             return True
-        if text.startswith('切换渠道 '):
-            self.r.reply(msg, self._cmd_switch_channel(msg, text[len('切换渠道 '):]))
+        if text.startswith('切换 '):
+            self.r.reply(msg, self._cmd_switch_channel(msg, text[len('切换 '):]))
             return True
         if text.startswith('设置key '):
             key = text[len('设置key '):].strip()
@@ -1183,7 +1418,11 @@ class CommandRouter:
             return True
         if (text in ('好感度开', '好感度关', '好感度影子开', '好感度影子关')
                 or text.startswith(('关系详情 ', '关系设置 ', '关系重置 '))):
-            self.r.reply(msg, self._cmd_relation_admin(msg, text))
+            answer = self._cmd_relation_admin(msg, text)
+            if text.startswith('关系详情 '):
+                self.reply_card(msg, answer)
+            else:
+                self.r.reply(msg, answer)
             return True
         # 立绘：新叫法是「立绘」，旧的「表情包」保留成别名（老用户/肌肉记忆）
         if text in ('开启立绘', '开启表情包'):
@@ -1197,7 +1436,7 @@ class CommandRouter:
                 self.r.reply(msg, self._cmd_load_emotes(msg, text[len(prefix):]))
                 return True
         if text in ('立绘状态', '表情包状态'):
-            self.r.reply(msg, self._cmd_emote_status(msg))
+            self.reply_card(msg, self._cmd_emote_status(msg))
             return True
         if text in ('立绘重载', '表情包重载'):
             self.r.reply(msg, self._cmd_emote_reload(msg))
@@ -1208,9 +1447,18 @@ class CommandRouter:
         if text == '图片理解关':
             self.r.reply(msg, self._cmd_image_toggle(msg, False))
             return True
+        if text in ('自动好友开', '自动好友关'):
+            self.r.reply(msg, self._cmd_friend_auto_toggle(msg, text.endswith('开')))
+            return True
+        if text == '自动好友状态':
+            self.reply_card(msg, self._cmd_friend_auto_status(msg))
+            return True
+        if text == '自动好友检查':
+            self.r.reply(msg, self._cmd_friend_auto_check(msg))
+            return True
         # 伴生原声语音指令
         if text in ('语音状态', '.voice status'):
-            self.r.reply(msg, self._cmd_voice_status(msg))
+            self.reply_card(msg, self._cmd_voice_status(msg))
             return True
         if text in ('测试语音', '.voice test'):
             res = self._cmd_voice_test(msg, '')

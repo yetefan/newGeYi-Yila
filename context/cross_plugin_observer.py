@@ -1,10 +1,10 @@
 # -*- encoding: utf-8 -*-
-"""歌伊跨插件上下文感知系统。
+"""伊菈跨插件上下文感知系统。
 
 功能：
 捕获同一机器人实例下其他插件（如 OlivaDice 骰娘、jrlp 今日运势/签到、漂流瓶等）发出的群聊消息，
-自动将这些系统输出作为事实沉淀至歌伊的 live_context 与 SQLite turns 对话历史中。
-防止歌伊因“看不见自己其他插件说了什么”而对群友的骰点反应、签到反馈等产生理解错误。
+自动将这些系统输出作为事实沉淀至伊菈的 live_context 与 SQLite turns 对话历史中。
+防止伊菈因“看不见自己其他插件说了什么”而对群友的骰点反应、签到反馈等产生理解错误。
 """
 
 from __future__ import annotations
@@ -42,12 +42,12 @@ _BOTTLE_KEYWORDS = (
 def guess_plugin_sender_label(text: str) -> str:
     """根据输出内容智能推断发信插件的身份标签。"""
     if any(kw in text for kw in _DICE_KEYWORDS):
-        return "歌伊(骰娘系统)"
+        return "伊菈(骰娘系统)"
     if any(kw in text for kw in _FORTUNE_KEYWORDS):
-        return "歌伊(今日运势)"
+        return "伊菈(今日运势)"
     if any(kw in text for kw in _BOTTLE_KEYWORDS):
-        return "歌伊(漂流瓶)"
-    return "歌伊(系统功能)"
+        return "伊菈(漂流瓶)"
+    return "伊菈(系统功能)"
 
 
 class CrossPluginObserver:
@@ -133,7 +133,7 @@ class CrossPluginObserver:
         if not text:
             return
 
-        # 检查是否为歌伊 newGeYi 自身刚刚发出的回复（避免自己记自己两次）
+        # 检查是否为伊菈 newGeYi 自身刚刚发出的回复（避免自己记自己两次）
         if hasattr(self.runtime, "is_recently_sent_by_self") and self.runtime.is_recently_sent_by_self(gid, text):
             return
 

@@ -36,13 +36,13 @@ class WebUIAssetsTest(unittest.TestCase):
         raw = (ROOT / 'app.json').read_bytes()
         self.assertFalse(raw.startswith(b'\xef\xbb\xbf'))
         manifest = json.loads(raw)
-        self.assertEqual(manifest['name'], '歌伊')
+        self.assertEqual(manifest['name'], '伊菈')
         self.assertEqual(manifest['namespace'], 'newGeYi')
         self.assertEqual(manifest['webui_config'][0]['path'], 'webui/index.html')
 
     def test_page_and_public_docs_drop_old_brand(self):
         # 不碰回滚目录；仅检查当前交付文字。
-        forbidden = '歌伊' + '圣堂'
+        forbidden = '伊菈' + '圣堂'
         files = [ROOT / 'webui/index.html', ROOT / 'README.md', ROOT / 'app.json']
         files.extend((ROOT / 'docs').glob('WEBUI*.md'))
         for path in files:

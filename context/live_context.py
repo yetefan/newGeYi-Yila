@@ -55,13 +55,13 @@ class LiveContextStore:
         )
 
     def append_assistant(self, session_key: str, source_seq: int, content: str) -> None:
-        """成功发送回复后写入，让后续群消息能看到歌伊刚才说的话。"""
+        """成功发送回复后写入，让后续群消息能看到伊菈刚才说的话。"""
         self.append(
             session_key=session_key,
             source_seq=source_seq,
             role='assistant',
             content=content,
-            sender_name='歌伊',
+            sender_name='伊菈',
         )
 
     def append(self, session_key: str, source_seq: int, role: str, content: str,
@@ -75,7 +75,7 @@ class LiveContextStore:
                 source_seq=source_seq,
                 role=role,
                 content=str(content),
-                sender_name=sender_name or ('歌伊' if role == 'assistant' else '用户'),
+                sender_name=sender_name or ('伊菈' if role == 'assistant' else '用户'),
                 sender_id=str(sender_id or ''),
                 created_at=now,
             )

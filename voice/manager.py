@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-"""歌伊伴生原声语音：核心调度器。
+"""伊菈伴生原声语音：核心调度器。
 
 负责：
 1. 语音网关通信与健康监控；
@@ -30,7 +30,7 @@ logger = logging.getLogger("newGeYi.voice")
 
 # 主动索要语音的常用中文意图正则
 _VOICE_INTENT_RE = re.compile(
-    r'(?:(?:发|来|录|发个|来个|说句|用|发条|发段)语音|说两句|说句话|说点什么|我想听你声音|听听你的声音|想听歌伊的声音|语音回复)',
+    r'(?:(?:发|来|录|发个|来个|说句|用|发条|发段)语音|说两句|说句话|说点什么|我想听你声音|听听你的声音|想听伊菈的声音|语音回复)',
     re.I,
 )
 
@@ -105,7 +105,7 @@ class VoiceManager:
         """记录一次健康判定：**只写日志，不发任何通知**。
 
         TTS 跑在骰主自己的电脑上，晚上关机是常态 —— 以前这里会私聊骰主
-        「歌伊语音降级」，等于每天半夜给主人发一条已知的噪声（2026-10-30 骰主明确要求去掉）。
+        「伊菈语音降级」，等于每天半夜给主人发一条已知的噪声（2026-10-30 骰主明确要求去掉）。
         语音本来就是可选增强：网关不在，文字照常，`语音状态` 指令里能查到熔断详情，
         日志里按状态跃变留一行就够。
         """
@@ -160,7 +160,7 @@ class VoiceManager:
 
         2026-10-30 改：以前第 2 步调的是 check_health(force=False)，缓存一过期就
         同步发一次 GET（2 秒超时）。主力机一关机，等于每隔 45 秒就有一条回复
-        平白多等 2 秒——用户体感就是「歌伊怎么突然卡一下」。现在探测全走后台线程。
+        平白多等 2 秒——用户体感就是「伊菈怎么突然卡一下」。现在探测全走后台线程。
         """
         if not self.enabled:
             return False, "语音功能已关闭"
@@ -206,7 +206,7 @@ class VoiceManager:
             self._session_consecutive[session_key] = True
 
     def mark_turn_without_voice(self, session_key: str) -> None:
-        """当歌伊进行了一次没有发语音的普通对话时，重置连发状态。"""
+        """当伊菈进行了一次没有发语音的普通对话时，重置连发状态。"""
         with self._lock:
             self._session_consecutive[session_key] = False
 
@@ -427,7 +427,7 @@ class VoiceManager:
         status_icon = "🟢 在线" if healthy else "🔴 离线"
 
         lines = [
-            "【歌伊伴生语音系统状态】",
+            "【伊菈伴生语音系统状态】",
             f"• 整体开关: {'开启' if self.enabled else '关闭'}",
             f"• 本地算力主机: {status_icon} ({status_str})",
             f"• 探测延迟: {latency} ms",

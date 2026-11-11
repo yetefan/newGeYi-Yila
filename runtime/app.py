@@ -40,6 +40,7 @@ from ..routing.permissions import Permissions
 from ..storage.database import SQLiteStore
 from ..voice.manager import VoiceManager
 from .rest import RestGuard
+from .friend_accept import FriendAutoAcceptor
 from .private_gate import PrivateGate
 from .scheduler import SessionScheduler
 from .sleep import SleepWindow
@@ -133,6 +134,8 @@ class Runtime:
         self.private_gate = PrivateGate(self.store, self.config)
         # 作息：睡前提醒 + 睡着时缄默（见 runtime/sleep.py）
         self.sleep = SleepWindow(self.store, self.config)
+        # 自动同意好友：协议端不推申请事件时，自己去 LLBot 网页接口轮询（默认关）
+        self.friend_accept = FriendAutoAcceptor(self.config)
         self.prompt_builder = PromptBuilder(
             self.config, self.store, self.memory, self.worldbook,
             self.live_context, self.images, self.renderer,
@@ -168,7 +171,8 @@ class Runtime:
     # 而 attention / permissions / curator 等组件怀里抱的还是启动时那份字典
     # —— 于是命令回「✅」、行为却不变（第二次开关尤其明显）。见交接文档 §28。
     _CFG_HOLDERS = ('prompt_builder', 'gateway', 'renderer', 'curator', 'images',
-                    'attention', 'permissions', 'group_profile', 'rest', 'memory', 'relationship')
+                    'attention', 'permissions', 'group_profile', 'rest', 'memory', 'relationship',
+                    'friend_accept')
 
     def apply_config(self) -> dict:
         """把当前 self.config 推给所有缓存了配置的组件。"""
@@ -275,7 +279,12 @@ class Runtime:
             self.curator.start()
         except Exception:  # noqa: BLE001
             logger.exception('启动记忆提炼线程失败')
-        # 跨插件消息感知钩子（捕获骰娘/运势/签到等其他插件输出，避免歌伊上下文理解脱节）
+        # 自动同意好友：协议端不推申请事件时的兜底轮询
+        try:
+            self.friend_accept.start()
+        except Exception:  # noqa: BLE001
+            logger.exception('启动自动同意好友线程失败')
+        # 跨插件消息感知钩子（捕获骰娘/运势/签到等其他插件输出，避免伊菈上下文理解脱节）
         try:
             self.cross_plugin_observer = install_cross_plugin_observer(self)
         except Exception:  # noqa: BLE001
@@ -285,6 +294,10 @@ class Runtime:
     def save(self, Proc) -> None:
         try:
             self.curator.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            self.friend_accept.stop()
         except Exception:  # noqa: BLE001
             pass
         try:
@@ -341,7 +354,7 @@ class Runtime:
         """私聊通知骰主（渠道全挂、自我保护静默等运维事件）。返回是否真的发出去了。
 
         踩过的坑（2026-10）：旧实现用 `next(iter(owner_set), '')` 取收件人，而
-        `owner_ids` 默认是空列表 —— 于是「歌伊触发了自我保护、骰主却一条私信都没收到」，
+        `owner_ids` 默认是空列表 —— 于是「伊菈触发了自我保护、骰主却一条私信都没收到」，
         而且日志里连一句失败都没有。现在收件人为空会**明确写日志**，绝不再假装发过。
         """
         targets = sorted(self.permissions._owner_set())
@@ -404,7 +417,7 @@ class Runtime:
 
     # ==================== 自我保护静默 ====================
     def is_resting(self, session_key: str) -> bool:
-        """这个会话是不是正处于歌伊的自我保护静默期。"""
+        """这个会话是不是正处于伊菈的自我保护静默期。"""
         try:
             return self.rest.is_resting(session_key)
         except Exception:  # noqa: BLE001 - 状态读挂了大不了照常回复
@@ -449,7 +462,7 @@ class Runtime:
                     tail = (f'{time.strftime("%H:%M", time.localtime(until))} 自动恢复｜'
                             f'可在该会话发「解除静默」提前结束')
                 ok = self._notify_owner(
-                    f'🛑 歌伊自我保护：{where} 已静默'
+                    f'🛑 伊菈自我保护：{where} 已静默'
                     f'{"（无限期）" if forever else " %d 分钟" % int(self.rest.minutes)}\n'
                     f'原因：{reason or "未说明"}\n'
                     f'触发者：{msg.sender_name}（{msg.sender_id}）\n'
@@ -473,7 +486,7 @@ class Runtime:
             path = override if override.is_file() else plugin_config.get_resource_path('role_prompt.txt')
             return path.read_text(encoding='utf-8').strip()
         except (OSError, UnicodeError):
-            return '你是歌伊，一个可爱的AI助手。'
+            return '你是伊菈，一个可爱的AI助手。'
 
     # ==================== 会话标识 ====================
     def _session_key(self, event, is_group: bool) -> SessionKey:
@@ -950,7 +963,7 @@ class Runtime:
         self.attention.note_spoken(msg.session.as_text())
         # 记下「刚和这个会话说过话」，供下一轮时间感知算间隔
         self.prompt_builder.mark_talked(msg.session.as_text())
-        # 歌伊自己的话也进缓冲：提炼器必须能区分「谁说的」，
+        # 伊菈自己的话也进缓冲：提炼器必须能区分「谁说的」，
         # 否则会把 AI 说的话记成某个用户的事实（调研里的最高危污染）。
         # ⚠️ 必须和用户消息用**同一个门**：私聊开关关掉 / 记忆关掉时，这里要是照写，
         # 那个会话就只剩「她自己的话」的缓冲，而 should_run 又永远不会去提炼它
@@ -1007,7 +1020,7 @@ class Runtime:
                 logger.debug('戳一戳回复写入旁观窗口失败', exc_info=True)
 
     def is_recently_sent_by_self(self, target_id: str, text: str) -> bool:
-        """检查指定文本是否为歌伊本体最近发出的回复。"""
+        """检查指定文本是否为伊菈本体最近发出的回复。"""
         now = time.time()
         tid = str(target_id).strip()
         clean = op_codes_to_plain(text).strip()
@@ -1022,6 +1035,8 @@ class Runtime:
     # ==================== 戳一戳 ====================
     def handle_poke(self, event, Proc) -> None:
         try:
+            if not (getattr(self, 'config', None) or {}).get('poke_reply_enabled', True):
+                return
             is_group = getattr(event.data, 'group_id', None) is not None
             uid = str(getattr(event.data, 'user_id', '') or '-')
             target = str(getattr(event.data, 'target_id', '') or '-')
@@ -1104,6 +1119,8 @@ class Runtime:
                 OlivOS.contentAPI.fake_sdk_event(bot_info=bot_info, fakename=plugin_config.NAMESPACE),
                 Proc.log,
             )
-            pe.send('private', int(owner_id), self.commands._cmd_menu(None))  # type: ignore[arg-type]
+            # 先发图；画不出来就发原来的文字菜单
+            menu = self.commands.menu_image() or self.commands._cmd_menu(None)  # type: ignore[arg-type]
+            pe.send('private', int(owner_id), menu)
         except Exception:  # noqa: BLE001
             logger.exception('menu failed')

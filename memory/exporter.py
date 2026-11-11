@@ -68,7 +68,7 @@ def _render(data: dict, counts: dict, meta: dict, clip: int = CLIP) -> str:
     add = lines.append
 
     add('=' * 60)
-    add('歌伊记忆导出')
+    add('伊菈记忆导出')
     add('=' * 60)
     add('导出时间: %s' % meta.get('exported_at', '—'))
     add('插件版本: %s' % meta.get('version', '?'))
@@ -143,7 +143,7 @@ def _render(data: dict, counts: dict, meta: dict, clip: int = CLIP) -> str:
 
     # ---- L3 ----
     add('=' * 60)
-    add('L3 歌伊自己的记忆（她自己的经历/承诺/情绪）')
+    add('L3 伊菈自己的记忆（她自己的经历/承诺/情绪）')
     add('=' * 60)
     groups = _group(data.get('self_memories') or [])
     if not groups:
@@ -177,7 +177,7 @@ def _render(data: dict, counts: dict, meta: dict, clip: int = CLIP) -> str:
         for row in reversed(rows):
             who = str(row.get('sender_name') or '') or str(row.get('sender_id') or '')
             role = str(row.get('role') or '')
-            tag = '歌伊' if role == 'assistant' else (who or '?')
+            tag = '伊菈' if role == 'assistant' else (who or '?')
             add('  [%s] %s: %s' % (_fmt_time(row.get('created_at')), tag, _clip(row.get('content'), clip)))
     add('')
 

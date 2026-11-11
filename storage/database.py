@@ -7,9 +7,12 @@ import os
 import re
 import sqlite3
 import threading
+import logging
 import math
 import time
 from typing import Any, Optional
+
+logger = logging.getLogger('newGeYi.database')
 
 # 事实判重用的归一化键：只留实义字符（中文、字母、数字），标点空白一律丢掉。
 # 这样「我喜欢喝牛奶。」和「我喜欢喝牛奶」会被认成同一条。
@@ -229,7 +232,7 @@ CREATE TABLE IF NOT EXISTS user_facts_archive(
 );
 CREATE INDEX IF NOT EXISTS idx_ufact_arch ON user_facts_archive(session_key, user_id, id);
 
--- L3：角色自身记忆。歌伊自己的经历/承诺/情绪——通用框架都没有这层，
+-- L3：角色自身记忆。伊菈自己的经历/承诺/情绪——通用框架都没有这层，
 -- 但角色扮演缺了它就不成立（否则她只记得你，不记得自己）。
 CREATE TABLE IF NOT EXISTS self_memories(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -392,6 +395,9 @@ class SQLiteStore:
         try:
             imp_cols = {row[1] for row in conn.execute('PRAGMA table_info(user_impressions)')}
             if imp_cols and 'scope' not in imp_cols:
+                # 建新表、搬数据、删旧表、改名必须一起成功；中途失败就整段回滚，
+                # 否则可能旧表已删、新表没改名，印象数据看起来就没了。
+                conn.execute('BEGIN IMMEDIATE')
                 conn.execute('''
                     CREATE TABLE IF NOT EXISTS user_impressions_v2(
                         user_id TEXT NOT NULL,
@@ -407,8 +413,11 @@ class SQLiteStore:
                 ''')
                 conn.execute('DROP TABLE user_impressions')
                 conn.execute('ALTER TABLE user_impressions_v2 RENAME TO user_impressions')
+                conn.execute('COMMIT')
         except sqlite3.Error:
-            pass
+            if conn.in_transaction:
+                conn.execute('ROLLBACK')
+            logger.exception('印象表迁移失败，已回滚，旧数据保持原样')
 
         try:
             hcols = {row[1] for row in conn.execute('PRAGMA table_info(user_impressions_history)')}
@@ -471,20 +480,32 @@ class SQLiteStore:
         out_tokens: int = 0,
     ) -> int:
         conn = self._conn()
-        row = conn.execute(
-            'SELECT COALESCE(MAX(seq), 0) FROM turns WHERE session_key=?', (session_key,)
-        ).fetchone()
-        seq = int(row[0]) + 1
-        conn.execute(
-            'INSERT INTO turns(session_key, seq, role, sender_id, sender_name, content, model, in_tokens, out_tokens, created_at) '
-            'VALUES(?,?,?,?,?,?,?,?,?,?)',
-            (session_key, seq, role, sender_id, sender_name, content, model, in_tokens, out_tokens, int(time.time())),
-        )
-        # 控制单会话总行数，防止无限增长
-        conn.execute(
-            'DELETE FROM turns WHERE session_key=? AND seq <= ?',
-            (session_key, seq - KEEP_TURNS_PER_SESSION),
-        )
+        # 取号、插入、裁剪放在同一个写事务里：连接是自动提交模式，
+        # 分开执行时两个线程会拿到同一个 seq，历史顺序就乱了。
+        own_tx = not conn.in_transaction
+        if own_tx:
+            conn.execute('BEGIN IMMEDIATE')
+        try:
+            row = conn.execute(
+                'SELECT COALESCE(MAX(seq), 0) FROM turns WHERE session_key=?', (session_key,)
+            ).fetchone()
+            seq = int(row[0]) + 1
+            conn.execute(
+                'INSERT INTO turns(session_key, seq, role, sender_id, sender_name, content, model, in_tokens, out_tokens, created_at) '
+                'VALUES(?,?,?,?,?,?,?,?,?,?)',
+                (session_key, seq, role, sender_id, sender_name, content, model, in_tokens, out_tokens, int(time.time())),
+            )
+            # 控制单会话总行数，防止无限增长
+            conn.execute(
+                'DELETE FROM turns WHERE session_key=? AND seq <= ?',
+                (session_key, seq - KEEP_TURNS_PER_SESSION),
+            )
+            if own_tx:
+                conn.execute('COMMIT')
+        except BaseException:
+            if own_tx and conn.in_transaction:
+                conn.execute('ROLLBACK')
+            raise
         return seq
 
     def recent_turns(self, session_key: str, limit: int = 12) -> list[dict]:
@@ -810,14 +831,14 @@ class SQLiteStore:
             if cross_scope and user_id is not None:
                 # 私聊互通模式：查私聊事实 + 全局事实 + 该用户的群聊事实
                 sql = ('SELECT id, user_id, fact, category, source, importance, valid_from, valid_to, '
-                       'keywords, last_hit_at, hit_count, session_key FROM user_facts '
+                       'keywords, last_hit_at, hit_count, session_key, created_at FROM user_facts '
                        'WHERE user_id=? AND (session_key=? OR session_key=\'global\' OR '
                        '(session_key NOT LIKE \'%:private:%\' AND session_key NOT LIKE \'%|private|%\'))')
                 args = [str(user_id), session_key]
             else:
                 # 私聊隔离模式：仅查该私聊会话的事实（不混入群聊与全局事实）
                 sql = ('SELECT id, user_id, fact, category, source, importance, valid_from, valid_to, '
-                       'keywords, last_hit_at, hit_count, session_key FROM user_facts WHERE session_key=?')
+                       'keywords, last_hit_at, hit_count, session_key, created_at FROM user_facts WHERE session_key=?')
                 args = [session_key]
                 if user_id is not None:
                     sql += ' AND user_id=?'
@@ -827,19 +848,19 @@ class SQLiteStore:
             if cross_scope and user_id is not None:
                 # 群聊互通模式：查本群事实 + 全局事实 + 该用户的私聊事实
                 sql = ('SELECT id, user_id, fact, category, source, importance, valid_from, valid_to, '
-                       'keywords, last_hit_at, hit_count, session_key FROM user_facts '
+                       'keywords, last_hit_at, hit_count, session_key, created_at FROM user_facts '
                        'WHERE user_id=? AND (session_key=? OR session_key=\'global\' OR '
                        'session_key LIKE \'%:private:%\' OR session_key LIKE \'%|private|%\')')
                 args = [str(user_id), session_key]
             elif include_global and user_id is not None and session_key != 'global':
                 # 群聊隔离模式：仅查本群 + global（不混入私聊事实）
                 sql = ('SELECT id, user_id, fact, category, source, importance, valid_from, valid_to, '
-                       'keywords, last_hit_at, hit_count, session_key FROM user_facts '
+                       'keywords, last_hit_at, hit_count, session_key, created_at FROM user_facts '
                        'WHERE (session_key=? OR session_key=\'global\') AND user_id=?')
                 args = [session_key, str(user_id)]
             else:
                 sql = ('SELECT id, user_id, fact, category, source, importance, valid_from, valid_to, '
-                       'keywords, last_hit_at, hit_count, session_key FROM user_facts WHERE session_key=?')
+                       'keywords, last_hit_at, hit_count, session_key, created_at FROM user_facts WHERE session_key=?')
                 args = [session_key]
                 if user_id is not None:
                     sql += ' AND user_id=?'
@@ -852,7 +873,8 @@ class SQLiteStore:
         rows = self._conn().execute(sql, tuple(args)).fetchall()
         return [{'id': r[0], 'user_id': r[1], 'fact': r[2], 'category': r[3], 'source': r[4],
                  'importance': r[5], 'valid_from': r[6], 'valid_to': r[7], 'keywords': r[8],
-                 'last_hit_at': r[9], 'hit_count': r[10], 'session_key': r[11]} for r in rows]
+                 'last_hit_at': r[9], 'hit_count': r[10], 'session_key': r[11],
+                 'created_at': r[12]} for r in rows]
 
     def facts_matching(self, session_key: str, user_id: str, words, limit: int = 40,
                        include_global: bool = True) -> list[dict]:
@@ -969,6 +991,17 @@ class SQLiteStore:
             (int(when or time.time()), int(fact_id)),
         )
 
+    def expire_owned_user_fact(self, fact_id: int, user_id: str) -> Optional[str]:
+        """只失效「这个人自己的、还有效」的一条。返回原文；不是他的或已经失效则不动。"""
+        row = self._conn().execute(
+            'SELECT fact FROM user_facts WHERE id=? AND user_id=? AND valid_to=0',
+            (int(fact_id), str(user_id)),
+        ).fetchone()
+        if not row:
+            return None
+        self.expire_user_fact(fact_id)
+        return str(row[0] or '')
+
     def count_user_facts(self, session_key: str, user_id: Optional[str] = None) -> int:
         sql = 'SELECT COUNT(*) FROM user_facts WHERE session_key=? AND valid_to=0'
         args: list = [session_key]
@@ -1051,7 +1084,7 @@ class SQLiteStore:
 
     def find_similar_self_memory(self, session_key: str, content: str,
                                  threshold: float = 0.60) -> Optional[dict]:
-        """模糊判重：若当前会话已有相似度 >= threshold 的歌伊自身记忆，返回已有条目。"""
+        """模糊判重：若当前会话已有相似度 >= threshold 的伊菈自身记忆，返回已有条目。"""
         exact = self.find_self_memory(session_key, content)
         if exact:
             return exact
@@ -1207,7 +1240,7 @@ class SQLiteStore:
         return int(row[0])
 
     def count_recent_assistant_msgs(self, session_key: str, since: int) -> int:
-        """歌伊自己在这个会话最近说了多少条（含被动回复）——自适应冷却的依据。"""
+        """伊菈自己在这个会话最近说了多少条（含被动回复）——自适应冷却的依据。"""
         row = self._conn().execute(
             "SELECT COUNT(*) FROM turns WHERE session_key=? AND role='assistant' AND created_at>=?",
             (session_key, int(since)),

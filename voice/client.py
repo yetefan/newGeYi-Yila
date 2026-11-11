@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-"""歌伊伴生原声语音：轻量 HTTP 客户端。
+"""伊菈伴生原声语音：轻量 HTTP 客户端。
 
 连接部署在主力电脑的本地算力端（Genie-TTS ONNX 极速合成服务）。
 具备严格的超时熔断、平滑降级与健康缓存能力，保护低配云服务器性能。
@@ -347,7 +347,7 @@ class VoiceClient:
         否则用户喊「发个语音」，而熔断窗口还剩两分钟，就会莫名其妙一声不吭。
         """
         clean_text = (text or "").strip()
-        # 1. 彻底清除违背歌伊人设的 "先生" / "せんせい" 称呼，回归歌伊原生设定
+        # 1. 彻底清除违背伊菈人设的 "先生" / "せんせい" 称呼，回归伊菈原生设定
         clean_text = re.sub(r'(?:先生|せんせい|センセイ)', '', clean_text)
         # 2. 清除 ASCII 颜文字、动作括号与异常方括号，保持纯净日语音素输入
         clean_text = re.sub(r'[（(][^）)]*[）)]', '', clean_text)
@@ -356,8 +356,14 @@ class VoiceClient:
         clean_text = re.sub(r'^[「『（(\[【\s…、，,。！？!?~～]+', '', clean_text).strip()
         # 4. 清除装饰符号（保留全角波浪号 〜 和破折号 …，用于触发极逼真的微颤气声与拖音）
         clean_text = re.sub(r'[☆★※♪♫♬#@$^*_+=\\/`]+', '', clean_text).strip()
-        # 5. 黄金长度控制（10~25 字符最佳，硬截断上限 35 字符，确保 2~4 秒自然呼吸节奏）
-        if len(clean_text) > 35:
+        # 5. 长度控制
+        #    英文（纯 ASCII）：按「5~15 个单词」放行，只有超过 15 个词才截，按词边界收口，不补「！」；
+        #    中日文：沿用原设计（10~25 字符最佳，硬截断上限 35 字符，2~4 秒自然呼吸节奏）。
+        if clean_text and not re.search(r'[^\x00-\x7f]', clean_text):
+            words = clean_text.split()
+            if len(words) > 15:
+                clean_text = ' '.join(words[:15]).rstrip(' ,;:-')
+        elif len(clean_text) > 35:
             split_pos = max(
                 clean_text[:30].rfind('！'),
                 clean_text[:30].rfind('。'),

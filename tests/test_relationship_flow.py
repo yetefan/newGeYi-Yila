@@ -73,7 +73,7 @@ class Base(unittest.TestCase):
         self.rt.config.update({'private_enabled': True, 'galgame_enabled': True, 'galgame_shadow': False,
                                'worldbook_enabled': True, 'time_awareness_enabled': False,
                                'emote_enabled': False, 'voice_enabled': False})
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，测试人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，测试人设。')
         self.svc = self.rt.relationship
         self.uid = str(int(time.time() * 1000) % 10 ** 9 + 300000)
 
@@ -184,7 +184,7 @@ class EndToEndTest(Base):
         self.rt.gateway = self.svc.gateway = gateway
         session = SessionKey('bot', 'qq', 'onebot', 'group', '-', '8888')
         msg = IncomingMessage(session=session, message_id='1', sender_id=self.uid, sender_name='x',
-                              text='歌伊你好', raw_text='歌伊你好', is_group=True, mentioned_bot=True,
+                              text='伊菈你好', raw_text='伊菈你好', is_group=True, mentioned_bot=True,
                               event=FakeEvent(), proc=None, arrival_seq=1, sender_is_bot=False)
         self.rt.process_job(msg, 'passive')
         self.drain()
@@ -330,7 +330,7 @@ class MildOverstepTest(Base):
 
     def test_gap_one_does_not_deduct(self):
         """陌生阶段说 L2（"你真可爱"）：不扣分、不加分，只记一笔。"""
-        _msg, out = self._run('歌伊你真可爱呀', 2)
+        _msg, out = self._run('伊菈你真可爱呀', 2)
         self.assertEqual(out['delta_raw'], 0)
         row = self.svc.recent_log(self.uid, 1)[0]
         self.assertEqual(row['tag'], 'overstep')
@@ -355,12 +355,12 @@ class MildOverstepTest(Base):
 
     def test_mild_gap_zero_restores_old_behaviour(self):
         self.rt.config['galgame_mild_gap'] = 0
-        _msg, out = self._run('歌伊你真可爱呀', 2)
+        _msg, out = self._run('伊菈你真可爱呀', 2)
         self.assertLess(out['delta_raw'], 0, '宽容档设 0 就该回到「超前一点也扣」')
 
     def test_reaction_note_is_one_shot(self):
         """反应只出现一次：下一轮她有点被打扰到，再下一轮就正常了。"""
-        msg, _out = self._run('歌伊你真可爱呀', 2)
+        msg, _out = self._run('伊菈你真可爱呀', 2)
         block = self.svc.block_for(msg)
         self.assertIn('刚才那句有点太亲近了', block)
         self.assertIn('阶段：陌生', block, '关系块本身不能少')
@@ -369,7 +369,7 @@ class MildOverstepTest(Base):
 
     def test_stale_reaction_is_dropped(self):
         """隔太久（>15 分钟）就不记仇了。"""
-        msg, _out = self._run('歌伊你真可爱呀', 2)
+        msg, _out = self._run('伊菈你真可爱呀', 2)
         self.rt.store.set_setting(
             'rel_mild:' + msg.session.as_text(), '%.0f' % (time.time() - 3600))
         self.assertNotIn('刚才那句有点太亲近了', self.svc.block_for(msg))

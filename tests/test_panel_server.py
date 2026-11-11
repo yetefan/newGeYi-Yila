@@ -42,7 +42,7 @@ class PanelServerTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.runtime = Runtime()
-        cls.runtime.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        cls.runtime.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
         cls.panel = Panel(cls.runtime)
         cls.server = LocalPanelServer(cls.panel, {'panel_local_enabled': True,
                                                  'panel_local_port': 0})
@@ -70,7 +70,7 @@ class PanelServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         page = body.decode('utf-8')
         self.assertIn(EVENT_NAME, page)
-        self.assertIn('歌伊', page)
+        self.assertIn('伊菈', page)
 
         status, body, kind = _request(self.base + '/assets/geyi-avatar.webp')
         self.assertEqual(status, 200)
@@ -152,7 +152,7 @@ class PanelServerTest(unittest.TestCase):
 class PanelServerLifecycleTest(unittest.TestCase):
     def setUp(self):
         self.runtime = Runtime()
-        self.runtime.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.runtime.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
         self.panel = Panel(self.runtime)
 
     def tearDown(self):

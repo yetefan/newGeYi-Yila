@@ -59,7 +59,7 @@ class ImageMarkTest(unittest.TestCase):
             self.assertEqual(strip_image_marks(raw), expected, f'输入 {raw!r}')
 
     def test_plain_text_untouched(self):
-        for text in ('歌伊今天好可爱', '【资料】这是正文', '100% 好评'):
+        for text in ('伊菈今天好可爱', '【资料】这是正文', '100% 好评'):
             self.assertEqual(strip_image_marks(text), text)
 
 
@@ -70,16 +70,16 @@ class PromptWithHistoryTest(unittest.TestCase):
         from newGeYi.runtime.app import Runtime
 
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
 
     def test_build_does_not_raise_with_history(self):
         live = self.rt.live_context
         live.append_user(make_msg('【图片】', seq=1))
         live.append_user(make_msg('刚才那张图好好笑', seq=2))
         live.append_assistant(SESSION.as_text(), 3, '（歪头）哪里好笑呀～')
-        live.append_user(make_msg('歌伊你看', seq=4))
+        live.append_user(make_msg('伊菈你看', seq=4))
 
-        messages = self.rt.prompt_builder.build(make_msg('歌伊', seq=5), is_active=False)
+        messages = self.rt.prompt_builder.build(make_msg('伊菈', seq=5), is_active=False)
 
         self.assertTrue(messages)
         self.assertEqual(messages[0]['role'], 'system')
@@ -113,7 +113,7 @@ class ActiveInstructionLevelTest(unittest.TestCase):
         from newGeYi.runtime.app import Runtime
 
         self.rt = Runtime()
-        self.rt.prompt_builder.set_role_prompt('你是歌伊，一个测试用人设。')
+        self.rt.prompt_builder.set_role_prompt('你是伊菈，一个测试用人设。')
 
     def test_all_levels_keep_the_skip_marker(self):
         for level in (0, 1, 2):

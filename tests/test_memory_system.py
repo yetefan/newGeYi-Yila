@@ -130,7 +130,7 @@ class MemorySystemTest(unittest.TestCase):
     # 5. 高维群友印象卡片 (User Impression)
     def test_user_impression_card(self):
         self.store.set_user_impression('10001', '喜欢开玩笑的熟人群友，对单机游戏很有研究')
-        msg = self._make_msg(text='歌伊下午好', sender_id='10001')
+        msg = self._make_msg(text='伊菈下午好', sender_id='10001')
         block = self.repo.build_block(msg)
         self.assertIn('【群友印象卡片', block)
         self.assertIn('喜欢开玩笑的熟人群友', block)
@@ -413,13 +413,68 @@ class MemorySystemTest(unittest.TestCase):
         self.store.add_user_fact(sk, '10001', '家里养了一只小猫叫米粒')
 
         res = handler._cmd_view_my_memory(msg)
-        self.assertIn('【歌伊的小本本 · 记忆档案】', res)
+        self.assertIn('【伊菈的小本本 · 记忆档案】', res)
         self.assertIn('经常在群里活跃的热心老朋友', res)
         self.assertIn('喜欢喝无糖可口可乐', res)
         self.assertIn('家里养了一只小猫叫米粒', res)
         # 确认没有时间戳前缀
         self.assertNotIn('[刚刚]', res)
         self.assertNotIn('[今天]', res)
+        self.assertRegex(res, r'1\. ')
+        self.assertRegex(res, r'2\. ')
+
+    def test_forget_one_fact_by_the_number_just_shown(self):
+        from unittest.mock import MagicMock
+        from newGeYi.routing.commands import CommandRouter
+
+        msg = self._make_msg(text='伊菈记忆', sender_id='10001')
+        sk = msg.session.as_text()
+        self.store.add_user_fact(sk, '10001', '喜欢喝无糖可口可乐')
+        self.store.add_user_fact(sk, '10001', '家里养了一只小猫叫米粒')
+        self.store.add_user_fact(sk, '20002', '别人的秘密')
+
+        runtime = MagicMock()
+        runtime.store = self.store
+        runtime.config = self.config
+        runtime.memory = self.repo
+        runtime.permissions.is_master.return_value = False
+        runtime.permissions.is_group_admin.return_value = False
+        runtime.video_context = None
+        handler = CommandRouter(runtime)
+
+        shown = handler._cmd_view_my_memory(msg)
+        self.assertIn('1. 家里养了一只小猫叫米粒', shown)
+        self.assertIn('2. 喜欢喝无糖可口可乐', shown)
+        self.assertNotIn('别人的秘密', shown)
+
+        forget = self._make_msg(text='伊菈忘记2', sender_id='10001')
+        self.assertTrue(handler.try_handle(forget))
+        answer = runtime.reply.call_args[0][1]
+        self.assertIn('喜欢喝无糖可口可乐', answer)
+
+        left = self.store.list_user_facts(sk, '10001', limit=10)
+        self.assertEqual([row['fact'] for row in left], ['家里养了一只小猫叫米粒'])
+        self.assertEqual(self.store.count_user_facts(sk, '20002'), 1)
+
+        several = handler._cmd_forget_numbered(msg, '1 1 9')
+        self.assertIn('小猫叫米粒', several)
+        self.assertIn('对不上：9', several)
+        self.assertEqual(self.store.list_user_facts(sk, '10001', limit=10), [])
+
+        chat = self._make_msg(text='伊菈忘记告诉你了', sender_id='10001')
+        runtime.reply.reset_mock()
+        self.assertFalse(handler.try_handle(chat))
+        runtime.reply.assert_not_called()
+
+        other = self._make_msg(text='伊菈忘记 1', sender_id='10001', session_id='88888')
+        self.assertTrue(handler.try_handle(other))
+        self.assertIn('先发一次', runtime.reply.call_args[0][1])
+
+        stolen_id = self.store.list_user_facts(sk, '20002', limit=1)[0]['id']
+        handler._remember_memory_page(msg, [(stolen_id, '别人的秘密')])
+        stolen = handler._cmd_forget_numbered(msg, '1')
+        self.assertIn('对不上', stolen)
+        self.assertEqual(self.store.count_user_facts(sk, '20002'), 1)
 
     def test_private_and_group_impressions_are_isolated(self):
         """群聊印象与私聊印象互不干扰、独立提炼。"""
