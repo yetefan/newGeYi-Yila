@@ -42,6 +42,7 @@ from ..voice.manager import VoiceManager
 from .rest import RestGuard
 from .friend_accept import FriendAutoAcceptor
 from .private_gate import PrivateGate
+from .reactions import ReactionClient
 from .scheduler import SessionScheduler
 from .sleep import SleepWindow
 
@@ -136,6 +137,8 @@ class Runtime:
         self.sleep = SleepWindow(self.store, self.config)
         # 自动同意好友：协议端不推申请事件时，自己去 LLBot 网页接口轮询（默认关）
         self.friend_accept = FriendAutoAcceptor(self.config)
+        # 表情回应：该回却没回出去的群消息，贴一个表情代替沉默（见 runtime/reactions.py）
+        self.reactions = ReactionClient(self.config)
         self.prompt_builder = PromptBuilder(
             self.config, self.store, self.memory, self.worldbook,
             self.live_context, self.images, self.renderer,
@@ -172,7 +175,7 @@ class Runtime:
     # —— 于是命令回「✅」、行为却不变（第二次开关尤其明显）。见交接文档 §28。
     _CFG_HOLDERS = ('prompt_builder', 'gateway', 'renderer', 'curator', 'images',
                     'attention', 'permissions', 'group_profile', 'rest', 'memory', 'relationship',
-                    'friend_accept')
+                    'friend_accept', 'reactions')
 
     def apply_config(self) -> dict:
         """把当前 self.config 推给所有缓存了配置的组件。"""

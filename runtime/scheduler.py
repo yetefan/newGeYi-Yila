@@ -93,6 +93,7 @@ class SessionScheduler:
         job = (msg, kind)
         now = time.time()
         need_kick = False
+        dropped = False
         with self._lock:
             state = self._states.get(key)
             if state is None:
@@ -116,16 +117,34 @@ class SessionScheduler:
                         '会话队列已满（%d/%d），本条被丢弃 | %s | %r',
                         len(state.pending), max_pending, key[-24:], (msg.text or '')[:30],
                     )
-                return False
-            state.pending.append(job)
-            if not state.worker_active:
-                state.worker_active = True
-                state.last_progress_at = now
-                self._prune_locked()
-                need_kick = True
+                dropped = True
+            else:
+                state.pending.append(job)
+                if not state.worker_active:
+                    state.worker_active = True
+                    state.last_progress_at = now
+                    self._prune_locked()
+                    need_kick = True
+        if dropped:
+            return False
+        # 只要决定要回就先贴个表情表示「收到了」，模型慢慢想也不会显得没反应。
+        # 主动搭话也算：没被点名但她自己插话时，同样该让人看出她接住了这条。
+        # 私聊由 ReactionClient 自己挡掉（接口只支持群消息）。
+        # 必须在锁外、而且后台发（HTTP 最多等 5 秒），失败不影响排队。
+        self._react(msg, '已收到' if kind == 'passive' else '主动搭话')
         if need_kick:
             self._kick(key)
         return True
+
+    def _react(self, msg: IncomingMessage, reason: str) -> None:
+        """表情回应是可选功能：组件不在、或自己出错，都不能影响队列。"""
+        client = getattr(self.runtime, 'reactions', None)
+        if client is None:
+            return
+        try:
+            client.react_async(msg, reason)
+        except Exception:  # noqa: BLE001
+            logger.exception('表情回应调用异常 | %s', reason)
 
     def _kick(self, key: str) -> None:
         """起一个 drain 线程任务；线程池已经关了（插件重载后事件还发到旧 runtime）就重建。"""

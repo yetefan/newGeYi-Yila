@@ -600,18 +600,21 @@ class LLMGateway:
         if len(candidates) < 2:
             cycles = 1
         empty_retry_used = False
+        stopped_by_deadline = False
         for cycle in range(cycles):
             for provider, state in candidates:
                 if deadline and time.time() > deadline:
                     last_error = last_error if last_error != 'unknown' else 'deadline'
                     logger.warning('模型调用总时长超过 %.0fs（%s），停止本次故障转移',
                                    budget, last_error)
+                    stopped_by_deadline = True
                     break
                 # 第二轮跳过「key 无效」这类不会自己好的渠道：重试一次只是白等。
                 # 超时 / 5xx / 空回复仍然照骰主的意思再撞一次（可能是瞬时抖动）。
                 if cycle and state.last_error in ('http_401', 'http_403', 'no_api_key'):
                     continue
-                result = self._call_provider(provider, state, req, kind, session_key)
+                result = self._call_provider(
+                    provider, state, req, kind, session_key, deadline=deadline)
                 if result.ok:
                     if cycle:
                         logger.info('第 %d 轮才连通：%s（前一轮全军覆没后才接上）',
@@ -635,11 +638,11 @@ class LLMGateway:
                         latency_ms=int((time.time() - start) * 1000),
                         error_code=last_error, error_message=last_message,
                     )
+            if stopped_by_deadline:
+                break
             if cycle + 1 < cycles:
                 logger.warning('第 %d 轮 %d 个渠道全失败（%s），回到第一个渠道再来一轮',
                                cycle + 1, len(candidates), last_error)
-            if deadline and time.time() > deadline:
-                break
         if not is_provider_fault(last_error):
             # 兜底：到这一步说明是请求/内容问题，不该触发「全挂」流程
             return ModelResult(
@@ -713,7 +716,8 @@ class LLMGateway:
         )
 
     def _call_provider(self, provider: Provider, state: ProviderState,
-                       req: ModelRequest, kind: str, session_key: str) -> ModelResult:
+                       req: ModelRequest, kind: str, session_key: str,
+                       deadline: float = 0.0) -> ModelResult:
         cfg = self.config
         start = time.time()
         if not provider.api_key:
@@ -731,12 +735,22 @@ class LLMGateway:
         with self._semaphore:
             session = self._get_session()
             for attempt in range(retries + 1):
+                # 总预算只在换渠道前检查挡不住正在跑的请求：一个 45~60 秒的超时
+                # 从预算快用完时才起步，会把 150 秒的上限冲破一两分钟。
+                # 这里把单次请求的超时收进剩余预算；不够再试一次就不再重试。
+                timeout = provider.timeout
+                if deadline:
+                    remaining = deadline - time.time()
+                    if remaining <= 1:
+                        last_error = last_error or 'deadline'
+                        break
+                    timeout = min(timeout, remaining)
                 try:
                     resp = session.post(
                         url,
                         headers=self._headers(provider),
                         json=body,
-                        timeout=provider.timeout,
+                        timeout=timeout,
                     )
                     if resp.status_code == 200:
                         data = resp.json()
@@ -777,12 +791,16 @@ class LLMGateway:
                     break
                 except requests.Timeout:
                     last_error = 'timeout'
+                    if deadline and time.time() >= deadline:
+                        break
                     if attempt < retries:
                         time.sleep(0.5 + 0.5 * attempt)
                         continue
                     break
                 except requests.ConnectionError:
                     last_error = 'connection_error'
+                    if deadline and time.time() >= deadline:
+                        break
                     if attempt < retries:
                         time.sleep(0.5 + 0.5 * attempt)
                         continue

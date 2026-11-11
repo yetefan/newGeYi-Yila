@@ -23,7 +23,7 @@ BOOL_KEYS = {
     'memory_private_enabled', 'memory_private_to_group',
     'image_enabled', 'emote_enabled', 'voice_enabled', 'rest_enabled', 'rest_private_forever',
     'panel_local_enabled',
-    'friend_auto_accept',
+    'friend_auto_accept', 'reaction_enabled',
     'galgame_enabled', 'galgame_shadow', 'galgame_owner_exempt',
     'reply_audit_enabled', 'religion_guard_enabled',
     'sleep_enabled', 'sleep_notice_once', 'sleep_owner_exempt',
@@ -84,19 +84,22 @@ STRING_KEYS = {'assistant_name': 80, 'active_quiet_hours': 11, 'reply_audit_fall
                'galgame_judge_model': 120, 'affection_provider': 80,
                'sponsor_thanks_text': 200,
                'llbot_webui_url': 200, 'llbot_webui_token': 200,
+               'reaction_http_url': 200, 'reaction_access_token': 200,
                'sleep_window': 11, 'sleep_notice_text': 120}
 LIST_KEYS = {'triggers': (50, 80), 'owner_ids': (50, 40), 'ignore_sender_ids': (200, 40),
              'incomplete_tails': (100, 80), 'galgame_exempt_ids': (50, 40),
              'sponsor_ids': (500, 40), 'sponsor_tier1_ids': (500, 40),
              'sponsor_tier2_ids': (500, 40), 'beta_ids': (200, 40),
-             'private_trigger_extra': (50, 40)}
+             'private_trigger_extra': (50, 40),
+             'reaction_emoji_ids': (20, 16)}
 # 难度数组：长度必须是 6（对应阶段 0~5），每项 (最小值, 最大值)；阈值还要求单调不减
 GALGAME_ARRAYS = {'galgame_thresholds': (0, 300), 'galgame_min_days': (0, 365),
                   'galgame_daily_cap': (0, 100)}
 EDITABLE_KEYS = sorted((BOOL_KEYS | set(NUMBER_KEYS) | set(STRING_KEYS) | set(LIST_KEYS)
                         | set(GALGAME_ARRAYS) | {'gate_weights', 'active_tier_probability'}) & set(plugin_config.DEFAULT_CONFIG))
 SECRET_FIELDS = ['api_key', 'voice_auth_token', 'voice_onebot_access_token', 'extra_headers',
-                 'llbot_webui_token', 'providers[].api_key', 'providers[].extra_headers']
+                 'llbot_webui_token', 'reaction_access_token',
+                 'providers[].api_key', 'providers[].extra_headers']
 _SECRET_NAME = re.compile(r'(?:api[_-]?key|access[_-]?token|auth|password|secret|credential|authorization)', re.I)
 _URL_AUTH = re.compile(r'(https?://)([^\s/?#]*@)', re.I)
 _URL_QUERY = re.compile(r'(https?://[^\s?#]+)\?[^\s#]*', re.I)

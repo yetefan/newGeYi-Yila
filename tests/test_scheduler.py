@@ -268,5 +268,49 @@ class LogBridgeTest(unittest.TestCase):
         self.assertIn('炸了', text)
 
 
+class ReactionOnQueueTest(unittest.TestCase):
+    def test_queued_passive_reacts_outside_the_lock(self):
+        """决定要回、成功进队列的消息要贴表情（被动和主动搭话都贴），而且贴的动作在调度锁外面。"""
+        rt = FakeRuntime({'max_pending_per_session': 6, 'incomplete_hold_seconds': 0})
+        sch = SessionScheduler(rt)
+        seen = []
+
+        class Recorder:
+            def react_async(self, msg, reason):
+                seen.append((msg.text, reason, sch._lock.locked()))
+
+        rt.reactions = Recorder()
+        try:
+            self.assertTrue(sch.submit(make_msg('叫她的'), 'passive'))
+            self.assertEqual(seen, [('叫她的', '已收到', False)])
+            seen.clear()
+            self.assertTrue(sch.submit(make_msg('她自己搭话'), 'active'))
+            self.assertEqual(seen, [('她自己搭话', '主动搭话', False)])
+        finally:
+            sch.shutdown()
+
+    def test_dropped_message_does_not_react(self):
+        """没排进去的消息不贴：她并没有收到要回的任务。"""
+        rt = FakeRuntime({'max_pending_per_session': 1, 'incomplete_hold_seconds': 0})
+        sch = SessionScheduler(rt)
+        state = _SessionState()
+        state.pending.append((make_msg('占着名额'), 'passive'))
+        state.worker_active = True
+        state.last_progress_at = time.time()
+        sch._states[SESSION.as_text()] = state
+        seen = []
+
+        class Recorder:
+            def react_async(self, msg, reason):
+                seen.append(msg.text)
+
+        rt.reactions = Recorder()
+        try:
+            self.assertFalse(sch.submit(make_msg('被丢掉的'), 'passive'))
+            self.assertEqual(seen, [])
+        finally:
+            sch.shutdown()
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

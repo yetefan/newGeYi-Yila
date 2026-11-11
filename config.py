@@ -24,7 +24,7 @@ DATA_DIR_NAME = 'newGeYi'
 # 2026-10-30：上一轮发了 v2.6.0 但只改了 app.json，这里还留在 2.5.0，
 # 于是日志/「伊菈状态」全都是 v2.5.0，和 GitHub 上的 tag 对不上。
 # 现在启动时会主动比对两个版本号，不一致就打 warning（见 version_mismatch）。
-PLUGIN_VERSION = '2.9.12'
+PLUGIN_VERSION = '2.9.13'
 
 # 主动搭话的“无事可说不回复”标记（模型只需输出这一行即表示忽略）
 SKIP_ACTIVE = '【伊菈忽略】'
@@ -359,6 +359,16 @@ DEFAULT_CONFIG = {
     # 语音气泡直发用的本地 OneBot HTTP 地址（含 access_token 就写在这里，别写进代码）
     'voice_onebot_http_url': '',
     'voice_onebot_access_token': '',
+    # ===== 表情回应 =====
+    # 群里她决定要回一条消息时（被点名，或自己主动搭话），先给那条消息贴一个 QQ 经典表情，
+    # 表示「收到了」，模型还在想的时候对方也知道她没装死。
+    # 走 LLBot 自己的 HTTP 接口（set_msg_emoji_like），OlivOS 没有这个能力。
+    # 只对群聊生效，私聊贴不了。默认关：没配地址时开着也只会写一行告警。
+    'reaction_enabled': False,
+    'reaction_http_url': '',
+    'reaction_access_token': '',
+    # 66 爱心 / 63 玫瑰 / 74 太阳 / 75 月亮，每次随机选一个
+    'reaction_emoji_ids': ['66', '63', '74', '75'],
     # ===== 自我保护静默 =====
     # 模型遇到谩骂/过当调戏/针对角色人格的侮辱/被连续纠缠时，可以输出 [REST:原因]
     # 让**当前会话**安静一段时间，并私聊通知骰主。到期自动恢复。
