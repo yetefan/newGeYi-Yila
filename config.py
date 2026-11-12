@@ -24,7 +24,7 @@ DATA_DIR_NAME = 'newGeYi'
 # 2026-10-30：上一轮发了 v2.6.0 但只改了 app.json，这里还留在 2.5.0，
 # 于是日志/「伊菈状态」全都是 v2.5.0，和 GitHub 上的 tag 对不上。
 # 现在启动时会主动比对两个版本号，不一致就打 warning（见 version_mismatch）。
-PLUGIN_VERSION = '2.9.14'
+PLUGIN_VERSION = '2.9.15'
 
 # 主动搭话的“无事可说不回复”标记（模型只需输出这一行即表示忽略）
 SKIP_ACTIVE = '【伊菈忽略】'
@@ -178,6 +178,11 @@ DEFAULT_CONFIG = {
     'private_trigger_only': False,
     # 私聊额外的触发词（不想动 triggers 时用这个，例如 ['在吗', '伊菈伊菈']）
     'private_trigger_extra': [],
+    # 叫到名字后开启连续私聊，双方10分钟无互动即关闭；0关闭连续会话。
+    'private_session_idle_seconds': 600,
+    'passive_priority_enabled': True,
+    'active_topic_enabled': True,
+    'active_topic_cooldown_seconds': 180,
     # 同一个人两条回复之间的最小间隔（秒）；期间到达的消息直接丢，不排队
     'private_min_interval': 4,
     # 连发达标：window 秒内超过 max 条就静默（防"连发十条追着问"）

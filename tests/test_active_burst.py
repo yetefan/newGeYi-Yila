@@ -87,6 +87,29 @@ class ActiveBurstTest(unittest.TestCase):
                                input_tokens=9000, output_tokens=20, latency_ms=5)
         self.rt.gateway.chat = fake_chat
 
+    def test_reacts_only_when_active_reply_will_be_sent(self):
+        seen = []
+        self.rt.reactions = types.SimpleNamespace(react_async=lambda msg, reason: seen.append((msg.message_id, reason)))
+        self._stub(speak_at=0)
+        msg, sent = make_msg()
+        self.rt.process_job(msg, 'active')
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(seen, [(msg.message_id, '主动搭话')])
+
+    def test_silent_or_shadow_active_cycle_does_not_react(self):
+        seen = []
+        self.rt.reactions = types.SimpleNamespace(react_async=lambda *args: seen.append(args))
+        self._stub(speak_at=99)
+        msg, sent = make_msg()
+        self.rt.process_job(msg, 'active')
+        self.assertEqual(sent, [])
+        self.assertEqual(seen, [])
+        self._stub(speak_at=0)
+        self.rt.config['active_shadow'] = True
+        self.rt.process_job(msg, 'active')
+        self.assertEqual(sent, [])
+        self.assertEqual(seen, [])
+
     def test_escalates_until_spoken(self):
         self._stub(speak_at=2)
         msg, sent = make_msg()

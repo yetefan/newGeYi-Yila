@@ -270,7 +270,7 @@ class LogBridgeTest(unittest.TestCase):
 
 class ReactionOnQueueTest(unittest.TestCase):
     def test_queued_passive_reacts_outside_the_lock(self):
-        """决定要回、成功进队列的消息要贴表情（被动和主动搭话都贴），而且贴的动作在调度锁外面。"""
+        """被动消息入队时贴表情，主动评估入队时不贴；调用在锁外。"""
         rt = FakeRuntime({'max_pending_per_session': 6, 'incomplete_hold_seconds': 0})
         sch = SessionScheduler(rt)
         seen = []
@@ -285,7 +285,7 @@ class ReactionOnQueueTest(unittest.TestCase):
             self.assertEqual(seen, [('叫她的', '已收到', False)])
             seen.clear()
             self.assertTrue(sch.submit(make_msg('她自己搭话'), 'active'))
-            self.assertEqual(seen, [('她自己搭话', '主动搭话', False)])
+            self.assertEqual(seen, [])
         finally:
             sch.shutdown()
 

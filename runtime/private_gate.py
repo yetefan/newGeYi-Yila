@@ -42,6 +42,7 @@ class PrivateGate:
         self.config = config
         # 检查和记账必须串起来：两个请求同时读到同一个次数，限额就会被多放行。
         self._lock = threading.RLock()
+        self._dialogue_at = {}
 
     # ---------- 配置读取（都允许脏值） ----------
     def _num(self, key: str, default: float) -> float:
@@ -69,6 +70,25 @@ class PrivateGate:
     def hit_trigger(self, text: str) -> bool:
         body = str(text or '')
         return any(word in body for word in self.trigger_words())
+
+    def dialogue_open(self, session_key: str) -> bool:
+        with self._lock:
+            now = time.monotonic()
+            timeout = max(0.0, self._num('private_session_idle_seconds', 600))
+            for key, stamp in list(self._dialogue_at.items()):
+                if now - stamp >= timeout:
+                    self._dialogue_at.pop(key, None)
+            return session_key in self._dialogue_at
+
+    def addressed(self, msg) -> bool:
+        return (not self.trigger_only() or getattr(msg, 'mentioned_bot', False)
+                or self.hit_trigger(getattr(msg, 'text', ''))
+                or self.dialogue_open(msg.session.as_text()))
+
+    def note_activity(self, session_key: str, open_session=False) -> None:
+        with self._lock:
+            if open_session or self.dialogue_open(session_key):
+                self._dialogue_at[session_key] = time.monotonic()
 
     # ---------- 状态读写 ----------
     def _key(self, name: str, session_key: str) -> str:
@@ -118,9 +138,11 @@ class PrivateGate:
         session_key = msg.session.as_text()
 
         # ① 触发词模式：没叫她就只当没看见（消息仍会进记忆缓冲，她知道你在说啥）
-        if self.trigger_only() and not (getattr(msg, 'mentioned_bot', False)
-                                        or self.hit_trigger(getattr(msg, 'text', ''))):
+        if not self.addressed(msg):
             return False, 'trigger'
+
+        # 已打开会话中的用户发言也算互动；仍保留防连发和每日额度。
+        self.note_activity(session_key)
 
         # ② 防连发：两条回复之间留最小间隔
         min_interval = self._num('private_min_interval', 0)
@@ -199,6 +221,7 @@ class PrivateGate:
             self._commit_locked(session_key)
 
     def _commit_locked(self, session_key: str) -> None:
+        self.note_activity(session_key, open_session=True)
         now = time.time()
         try:
             self.store.set_setting(self._key('last', session_key), str(now))
@@ -258,6 +281,11 @@ class PrivateGate:
             lines.append('全体私聊今日 %d 条（未设总限额）' % used_global)
         if self.trigger_only():
             lines.append('模式：只在命中触发词时回应（%s）' % '、'.join(self.trigger_words()))
+            seconds = int(self._num('private_session_idle_seconds', 600))
+            if seconds > 0:
+                lines.append('叫到后连续聊天，%d 分钟无互动自动关闭' % (seconds // 60))
+                if session_key:
+                    lines.append('连续会话：' + ('已开启' if self.dialogue_open(session_key) else '已关闭，叫名字可开启'))
         else:
             lines.append('模式：私聊每句都回')
         return '\n'.join(lines)

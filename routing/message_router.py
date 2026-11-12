@@ -84,7 +84,7 @@ class MessageRouter:
         if msg.is_group:
             directed = bool(msg.mentioned_bot or self._trigger_hit(msg.text))
         elif self._private_gate().trigger_only():
-            directed = bool(msg.mentioned_bot or self._private_gate().hit_trigger(msg.text))
+            directed = self._private_gate().addressed(msg)
         else:
             directed = True
         gate = self._gate() if msg.is_group else None
@@ -168,6 +168,14 @@ class MessageRouter:
                 # 纯表情包只是刷图，不是「有人找你说话」——概率打折，
                 # 否则群里图一多她就变成见图就评（线上实测）
                 factor = float(cfg.get('active_bare_image_factor', 0.3) or 0.0)
+            topics = getattr(self.r, 'topics', None)
+            if topics is not None:
+                live = getattr(self.r, 'live_context', None)
+                recent = live.snapshot(msg.session.as_text(), before_source_seq=msg.arrival_seq,
+                                       window_seconds=300, max_messages=8) if live is not None else []
+                topic_factor, reason = topics.factor(msg.session.as_text(), msg.text, recent)
+                factor *= topic_factor
+                self._debug(msg, directed, passive_allowed, reason)
             decision = gate.evaluate(msg.session.as_text(), probability_factor=factor,
                                      features=self._features(msg))
             if decision.allow:

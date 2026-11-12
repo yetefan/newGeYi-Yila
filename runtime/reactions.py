@@ -17,6 +17,7 @@ import random
 import threading
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit, urlunsplit
 
 logger = logging.getLogger('newGeYi.reactions')
 
@@ -37,7 +38,17 @@ class ReactionClient:
         if not raw:
             # 没单独配就借用语音直发的地址（同一个 LLBot HTTP 服务）
             raw = str(self.config.get('voice_onebot_http_url') or '').strip().rstrip('/')
-        return raw
+        if not raw:
+            return ''
+        parts = urlsplit(raw)
+        path = parts.path.rstrip('/')
+        # 语音配置可能是完整动作地址；替换动作，保留查询参数中的 access_token。
+        for action in ('send_msg', 'send_group_msg', 'send_private_msg', 'set_msg_emoji_like'):
+            if path.endswith('/' + action):
+                path = path[:-(len(action) + 1)]
+                break
+        return urlunsplit((parts.scheme, parts.netloc, path + '/set_msg_emoji_like',
+                           parts.query, ''))
 
     def _emoji_ids(self) -> list[str]:
         raw = self.config.get('reaction_emoji_ids')
@@ -63,10 +74,12 @@ class ReactionClient:
         emoji_id = random.choice(self._emoji_ids())
         payload = json.dumps({'message_id': message_id, 'emoji_id': emoji_id}).encode('utf-8')
         headers = {'Content-Type': 'application/json'}
-        token = str(self.config.get('reaction_access_token') or '').strip()
+        token = str(self.config.get('reaction_access_token') or (
+            self.config.get('voice_onebot_access_token') if not self.config.get('reaction_http_url')
+            else '') or '').strip()
         if token:
             headers['Authorization'] = 'Bearer ' + token
-        request = urllib.request.Request(base + '/set_msg_emoji_like', data=payload, headers=headers)
+        request = urllib.request.Request(base, data=payload, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=5) as response:
                 body = json.loads(response.read().decode('utf-8'))

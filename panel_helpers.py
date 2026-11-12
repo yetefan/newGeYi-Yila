@@ -23,7 +23,7 @@ BOOL_KEYS = {
     'memory_private_enabled', 'memory_private_to_group',
     'image_enabled', 'emote_enabled', 'voice_enabled', 'rest_enabled', 'rest_private_forever',
     'panel_local_enabled',
-    'friend_auto_accept', 'reaction_enabled',
+    'friend_auto_accept', 'reaction_enabled', 'passive_priority_enabled', 'active_topic_enabled',
     'galgame_enabled', 'galgame_shadow', 'galgame_owner_exempt',
     'reply_audit_enabled', 'religion_guard_enabled',
     'sleep_enabled', 'sleep_notice_once', 'sleep_owner_exempt',
@@ -35,6 +35,8 @@ BOOL_KEYS = {
 }
 # 数字键 = (最小值, 最大值, 必须整数)。只开放确有热更新语义的字段。
 NUMBER_KEYS = {
+    'private_session_idle_seconds': (0, 3600, True),
+    'active_topic_cooldown_seconds': (0, 1800, True),
     'fast_temperature': (0, 2, False), 'fast_max_tokens': (1, 32768, True),
     'max_recent_turns': (1, 200, True), 'max_context_chars': (100, 200000, True),
     'max_reply_chars': (1, 10000, True), 'group_live_window_seconds': (1, 7200, True),

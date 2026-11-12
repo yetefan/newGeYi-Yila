@@ -43,6 +43,8 @@ from .rest import RestGuard
 from .friend_accept import FriendAutoAcceptor
 from .private_gate import PrivateGate
 from .reactions import ReactionClient
+from .active_requests import ActiveRequests
+from ..routing.topic_participation import TopicParticipation
 from .scheduler import SessionScheduler
 from .sleep import SleepWindow
 
@@ -137,7 +139,7 @@ class Runtime:
         self.sleep = SleepWindow(self.store, self.config)
         # 自动同意好友：协议端不推申请事件时，自己去 LLBot 网页接口轮询（默认关）
         self.friend_accept = FriendAutoAcceptor(self.config)
-        # 表情回应：该回却没回出去的群消息，贴一个表情代替沉默（见 runtime/reactions.py）
+        # 表情回应：群消息进入回复队列时，先贴一个表情表示收到（见 runtime/reactions.py）
         self.reactions = ReactionClient(self.config)
         self.prompt_builder = PromptBuilder(
             self.config, self.store, self.memory, self.worldbook,
@@ -154,6 +156,8 @@ class Runtime:
         self.commands = CommandRouter(self)
         self.router = MessageRouter(self)
         self.scheduler = SessionScheduler(self)
+        self.active_requests = ActiveRequests(limit=max(1, min(2, int(self.config.get('global_concurrency', 4)) - 1)))
+        self.topics = TopicParticipation(self.config)
         self._poke_counts: dict[str, tuple[int, float]] = {}
         self._poke_back_at: dict[str, float] = {}
         self.video_context = None
@@ -175,7 +179,7 @@ class Runtime:
     # —— 于是命令回「✅」、行为却不变（第二次开关尤其明显）。见交接文档 §28。
     _CFG_HOLDERS = ('prompt_builder', 'gateway', 'renderer', 'curator', 'images',
                     'attention', 'permissions', 'group_profile', 'rest', 'memory', 'relationship',
-                    'friend_accept', 'reactions')
+                    'friend_accept', 'reactions', 'topics')
 
     def apply_config(self) -> dict:
         """把当前 self.config 推给所有缓存了配置的组件。"""
@@ -313,6 +317,7 @@ class Runtime:
             pass
         try:
             self.scheduler.shutdown()
+            self.active_requests.shutdown()
         except Exception:  # noqa: BLE001
             pass
         # 还原猴补丁：跨插件钩子是直接替换别人模块属性，不还原就会随重载层层嵌套
@@ -664,17 +669,32 @@ class Runtime:
             model=cfg.get('fast_model', 'gemini-3.8-flash-medium'),
             temperature=float(cfg.get('fast_temperature', 0.7)),
             max_tokens=int(cfg.get('fast_max_tokens', 8192)),
+            cancel_event=threading.Event() if kind == 'active' and cfg.get('passive_priority_enabled', True) else None,
         )
         # 网关本身吞掉了网络异常，但「拼请求体」等步骤在 try 外面，以前一抛就直接
         # 冒到 _drain 的 except 里，整条栈又进不了日志 —— 线上就是「没有 api_calls、
         # 没有回复、也没有任何报错」。这里兜住并留痕。
         try:
-            result = self.gateway.chat(req, kind=kind, session_key=msg.session.as_text())
+            if kind == 'active' and cfg.get('passive_priority_enabled', True):
+                result = self.active_requests.call(
+                    msg.session.as_text(),
+                    lambda: self.gateway.chat(req, kind=kind, session_key=msg.session.as_text()),
+                    lambda: self._passive_waiting(msg), cancel_event=req.cancel_event)
+                if result is None:
+                    logger.info('主动评估让位或后台名额已满 | %s', msg.session.as_text()[-16:])
+                    return None, ''
+            else:
+                result = self.gateway.chat(req, kind=kind, session_key=msg.session.as_text())
         except Exception:  # noqa: BLE001
             logger.exception('网关调用抛异常（kind=%s, level=%s）| %s',
                              kind, level, msg.session.as_text()[-16:])
             return None, ''
         return result, (result.text or '')
+
+    def _passive_waiting(self, msg: IncomingMessage) -> bool:
+        scheduler = getattr(self, 'scheduler', None)
+        check = getattr(scheduler, 'passive_waiting', None)
+        return bool(callable(check) and check(msg.session.as_text()))
 
     def _active_cycle(self, msg: IncomingMessage, kind: str, cfg: dict):
         """主动搭话的一个周期：逐级加强，最多试 `active_burst_max_attempts` 次。
@@ -695,6 +715,9 @@ class Runtime:
         started = time.time()
         budget = float(cfg.get('active_burst_max_seconds', 12) or 0)
         for index, level in enumerate(levels):
+            if self._passive_waiting(msg):
+                self.attention.end_cycle(session, False)
+                return None, '', -1
             # 时间预算：这个群是**每会话串行**的，一条被动回复会排在整轮升级后面。
             # 试到一半超时就直接收手，宁可这一轮不说，也不能让 @她 的人等十几秒。
             if budget > 0 and index > 0 and time.time() - started > budget:
@@ -881,6 +904,10 @@ class Runtime:
                             spoken_level, msg.session.as_text()[-16:])
                 return
 
+        # 最后发送前再看一次，避免评估结束瞬间插入主动回复。
+        if is_active and self._passive_waiting(msg):
+            return
+
         # 伴生原声语音派发与双轨输出
         voice_annotation = ""
         if rendered.voice_payload:
@@ -930,7 +957,20 @@ class Runtime:
             msg.session.as_text(), 'assistant', content_to_record,
             model=result.model, in_tokens=result.input_tokens, out_tokens=result.output_tokens,
         )
-        self.reply(msg, rendered.text)
+        if is_active and (rendered.text or '').strip():
+            # 通过静默、审计、休息和影子模式检查，确认要开口才贴。
+            client = getattr(self, 'reactions', None)
+            if client is not None:
+                try:
+                    client.react_async(msg, '主动搭话')
+                except Exception:  # 表情接口不能阻断正文发送
+                    logger.exception('主动搭话表情回应调用异常')
+        delivered = self.reply(msg, rendered.text)
+        if delivered is not False:
+            if msg.is_group:
+                self.topics.note_spoken(msg.session.as_text(), msg.text, rendered.text)
+            else:
+                self.private_gate.note_activity(msg.session.as_text())
         # 私聊 galgame：回复发出后异步评审（不增加回复延迟，结果影响下一轮）
         if not msg.is_group:
             try:
@@ -979,7 +1019,7 @@ class Runtime:
             )
 
     # ==================== 回复发送 ====================
-    def reply(self, msg: IncomingMessage, text: str) -> None:
+    def reply(self, msg: IncomingMessage, text: str) -> bool:
         try:
             event = msg.event
             plain = op_codes_to_plain(text).strip()
@@ -989,8 +1029,10 @@ class Runtime:
                 event.send('group', msg.session.target_id, text)
             else:
                 event.send('private', msg.session.target_id, text)
+            return True
         except Exception:  # noqa: BLE001
             logger.exception('reply failed')
+            return False
 
     def _track_self_sent(self, session, text: str, is_group: bool) -> None:
         """把她自己发出的一句话记进「她说过什么」的账本。

@@ -109,6 +109,12 @@ class SessionScheduler:
                     now - state.last_progress_at, len(state.pending), key[-24:],
                 )
                 state.worker_active = False
+            priority = self.runtime.config.get('passive_priority_enabled', True)
+            if priority and kind == 'passive':
+                # 主动任务只是待评估机会，直接让位；被动消息保留原有顺序。
+                state.pending = collections.deque(job for job in state.pending if job[1] != 'active')
+            elif priority and kind == 'active' and state.pending:
+                return False
             max_pending = int(self.runtime.config.get('max_pending_per_session', 6))
             if len(state.pending) >= max_pending:
                 if now - state.warned_full_at > _FULL_WARN_INTERVAL:
@@ -127,14 +133,19 @@ class SessionScheduler:
                     need_kick = True
         if dropped:
             return False
-        # 只要决定要回就先贴个表情表示「收到了」，模型慢慢想也不会显得没反应。
-        # 主动搭话也算：没被点名但她自己插话时，同样该让人看出她接住了这条。
-        # 私聊由 ReactionClient 自己挡掉（接口只支持群消息）。
-        # 必须在锁外、而且后台发（HTTP 最多等 5 秒），失败不影响排队。
-        self._react(msg, '已收到' if kind == 'passive' else '主动搭话')
+        # 被动回复先表示收到；主动任务只是评估，等确认开口时再贴。
+        if kind == 'passive':
+            self._react(msg, '已收到')
         if need_kick:
             self._kick(key)
         return True
+
+    def passive_waiting(self, key: str) -> bool:
+        if not self.runtime.config.get('passive_priority_enabled', True):
+            return False
+        with self._lock:
+            state = self._states.get(key)
+            return bool(state and any(kind == 'passive' for _, kind in state.pending))
 
     def _react(self, msg: IncomingMessage, reason: str) -> None:
         """表情回应是可选功能：组件不在、或自己出错，都不能影响队列。"""

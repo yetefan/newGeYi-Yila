@@ -603,6 +603,8 @@ class LLMGateway:
         stopped_by_deadline = False
         for cycle in range(cycles):
             for provider, state in candidates:
+                if req.cancel_event is not None and req.cancel_event.is_set():
+                    return ModelResult(ok=False, error_code='cancelled')
                 if deadline and time.time() > deadline:
                     last_error = last_error if last_error != 'unknown' else 'deadline'
                     logger.warning('模型调用总时长超过 %.0fs（%s），停止本次故障转移',
@@ -615,6 +617,8 @@ class LLMGateway:
                     continue
                 result = self._call_provider(
                     provider, state, req, kind, session_key, deadline=deadline)
+                if req.cancel_event is not None and req.cancel_event.is_set():
+                    return ModelResult(ok=False, error_code='cancelled')
                 if result.ok:
                     if cycle:
                         logger.info('第 %d 轮才连通：%s（前一轮全军覆没后才接上）',
@@ -735,6 +739,8 @@ class LLMGateway:
         with self._semaphore:
             session = self._get_session()
             for attempt in range(retries + 1):
+                if req.cancel_event is not None and req.cancel_event.is_set():
+                    return ModelResult(ok=False, model=provider.model, error_code='cancelled')
                 # 总预算只在换渠道前检查挡不住正在跑的请求：一个 45~60 秒的超时
                 # 从预算快用完时才起步，会把 150 秒的上限冲破一两分钟。
                 # 这里把单次请求的超时收进剩余预算；不够再试一次就不再重试。
@@ -809,6 +815,8 @@ class LLMGateway:
                     last_error = type(exc).__name__
                     break
 
+        if req.cancel_event is not None and req.cancel_event.is_set():
+            return ModelResult(ok=False, model=provider.model, error_code='cancelled')
         result = ModelResult(
             ok=False,
             model=provider.model,

@@ -46,6 +46,8 @@ class ModelRequest:
     temperature: float = 0.7
     max_tokens: int = 500
     request_id: str = ''
+    # 本地取消信号，不写进API请求体。已发出的HTTP无法撤回，但不再重试或切渠道。
+    cancel_event: Any = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

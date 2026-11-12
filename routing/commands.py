@@ -73,6 +73,8 @@ class CommandRouter:
     def __init__(self, runtime):
         self.r = runtime
         self._memory_pages = {}
+        from .extra_commands import ExtraCommands
+        self.extra_commands = ExtraCommands(self)
 
     # ------------- 公共 -------------
     def _save_and_reload(self, changes: dict | None = None) -> None:
@@ -113,6 +115,8 @@ class CommandRouter:
             '',
             '[状态] 伊菈状态 | 伊菈用量',
             '[对话] 伊菈记忆 | 伊菈忘记 <编号> | 伊菈忘了我',
+            '[纠错] 伊菈修正记忆 编号 新内容 | 伊菈确认修正 | 伊菈取消修正',
+            '[表情] 伊菈表情列表 | 伊菈预览表情 名称（骰主/主人）',
             '[世界书] 伊菈世界书状态 | 伊菈查看触发词',
             '[私聊] 伊菈关系（看看她现在怎么看你）',
             '',
@@ -720,6 +724,7 @@ class CommandRouter:
                 if stamp:
                     # 只画在图上。文字回复里没有这行，所以不会进对话记录。
                     notes[line] = '记录于 %s' % stamp
+            lines.append('修正发「伊菈修正记忆 编号 新内容」，确认后才写入。')
             lines.append('删一条发「伊菈忘记 编号」，比如「伊菈忘记 2」。')
             lines.append('一次删几条用空格隔开，比如「伊菈忘记 1 3」。编号半小时内有效。')
             if more:
@@ -993,6 +998,8 @@ class CommandRouter:
             '--- 表情包状态 ---',
             f'表情包开关: {on} | 已加载 {loaded}/{total}',
             self.r.renderer.emote_budget(msg.session.as_text()),
+            self.extra_commands.status_reason(msg),
+            '自动表情受冷却、每小时上限和最近回复节流限制；手动预览独立限每会话15秒一张。',
             f'查找目录:\n{dirs}',
         ]
         if missing:
@@ -1105,7 +1112,7 @@ class CommandRouter:
         '休眠状态', '休眠开', '休眠关', '休眠重置',
         '重置上下文', '重载设定', '世界书开', '世界书关', '世界书重载',
         '好感度开', '好感度关', '好感度影子开', '好感度影子关',
-        '立绘状态', '立绘重载', '开启立绘', '关闭立绘',
+        '立绘状态', '立绘重载', '开启立绘', '关闭立绘', '表情列表',
         '表情包状态', '表情包重载', '开启表情包', '关闭表情包',
         '主动搭话开', '主动搭话关',
         '图片理解开', '图片理解关',
@@ -1121,7 +1128,7 @@ class CommandRouter:
     }
     _OWNER_CMD_PREFIX = (
         '添加触发词 ', '删除触发词 ', '加载立绘 ', '加载表情包 ', '设置key ', '切换 ', '切换模型 ',
-        '测试语音 ', '.voice test ', '解除静默 ',
+        '测试语音 ', '.voice test ', '解除静默 ', '预览表情 ',
         '关系详情 ', '关系设置 ', '关系重置 ',
         '赞助加 ', '赞助删 ',
         '休眠时间 ',
@@ -1190,6 +1197,11 @@ class CommandRouter:
         # 骰主/主人命令：未授权者一律明确拒绝，不再落入聊天流程
         if self._is_owner_cmd(text) and not is_master:
             self.r.reply(msg, deny)
+            return True
+
+        extra = self.extra_commands.handle(msg, text)
+        if extra is not None:
+            self.r.reply(msg, extra)
             return True
 
         # 公共命令
