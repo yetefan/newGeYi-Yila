@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from ..config import SKIP_ACTIVE
 from ..context.live_context import LiveContextStore
@@ -247,10 +247,17 @@ class PromptBuilder:
     def time_note(self, msg: IncomingMessage) -> str:
         """生成时间上下文。核心是「给模型时间感，但禁止它报时」。"""
         now = datetime.now()
+        local = now - timedelta(hours=8)
         lines = [
             '【时间感知（供你参考，务必不要直接报时）】',
-            f'现在是 {now.year} 年 {now.month} 月 {now.day} 日 {WEEKDAYS[now.weekday()]} '
-            f'{_daypart(now.hour)} {now.hour:02d}:{now.minute:02d}。',
+            f'对方所在的北京时间是 {now.year} 年 {now.month} 月 {now.day} 日 '
+            f'{WEEKDAYS[now.weekday()]} {_daypart(now.hour)} {now.hour:02d}:{now.minute:02d}。',
+            f'伊菈所在地的当地时间是 {local.year} 年 {local.month} 月 {local.day} 日 '
+            f'{WEEKDAYS[local.weekday()]} {_daypart(local.hour)} {local.hour:02d}:{local.minute:02d}。'
+            '这是北京时间减 8 小时，全年不调夏令时。',
+            '对方的饭点和作息按北京时间，不要当成伊菈的饭点。',
+            '被直接问你那里几点时回答上面的当地时间；没有被问时不主动报时。'
+            '使用现实日历，2156仅为世界背景年；当地深夜不代表必须停止回复，休眠仍由现有设置决定。',
         ]
         try:
             raw = self.store.get_setting(self._talk_key(msg.session.as_text()))

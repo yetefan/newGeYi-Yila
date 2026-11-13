@@ -146,3 +146,33 @@ class ActiveInstructionLevelTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+class FixedBritishTimeTest(unittest.TestCase):
+    def test_monday_0300_beijing_is_sunday_1900_local(self):
+        from datetime import datetime
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        builder = PB.PromptBuilder.__new__(PB.PromptBuilder)
+        builder.store = SimpleNamespace(get_setting=lambda key: None)
+        with patch.object(PB, 'datetime') as clock:
+            clock.now.return_value = datetime(2026, 11, 16, 3, 0)
+            note = builder.time_note(make_msg('你那里几点', seq=1))
+        self.assertIn('北京时间是 2026 年 11 月 16 日 星期一 凌晨 03:00', note)
+        self.assertIn('当地时间是 2026 年 11 月 15 日 星期日 晚上 19:00', note)
+        self.assertIn('全年不调夏令时', note)
+        self.assertIn('不要把上面的时间念出来', note)
+        self.assertIn('被直接问', note)
+
+    def test_new_year_and_summer_keep_fixed_eight_hour_offset(self):
+        from datetime import datetime
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        builder = PB.PromptBuilder.__new__(PB.PromptBuilder)
+        builder.store = SimpleNamespace(get_setting=lambda key: None)
+        for stamp, expected in [(datetime(2027,1,1,1,0), '当地时间是 2026 年 12 月 31 日 星期四 下午 17:00'),
+                                (datetime(2026,7,1,10,0), '当地时间是 2026 年 7 月 1 日 星期三 凌晨 02:00')]:
+            with patch.object(PB, 'datetime') as clock:
+                clock.now.return_value = stamp
+                note = builder.time_note(make_msg('时间', seq=1))
+            self.assertIn(expected.replace('下午 17:00','傍晚 17:00'), note)

@@ -8,7 +8,13 @@
 - 不与联网、搜索、RAG 耦合。
 
 条目字段：
-- keywords：关键词数组，命中任一即注入（子串匹配，全小写比较）。
+- keywords：强关键词数组，保持原有匹配语义，不自动降级“学校/朋友/科技”等词。
+- weak_keywords：可选弱关键词。需命中通用/配置锚点或至少两个不同弱词才放行。
+- excludes：可选碰撞短语，先逐条遮罩再匹配（“上海”不应触发“海”）。
+- links：可选一跳关联 id；只补剩余名额，不能越过阶段/范围或挤掉直接命中。
+- priority：可选有限浮点分数微调；缺省0。
+- 顶层 retrieval.persona_anchors：可选弱词锚点列表，按作品配置，不内置任何角色姓名。
+- lookup(max_total_chars=...)：可选本轮正文总字符硬预算；未传保持旧行为。
 - content：注入的正文，可多行（prompt_builder 会给续行加缩进）。
 - enabled：false 的条目直接忽略。
 - max_chars：可选，本条目的字数上限；不填用调用方的默认值。
@@ -80,6 +86,37 @@ def _positive_int(value: Any) -> int:
     return parsed if parsed > 0 else 0
 
 
+def _float_or_zero(value: Any) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return parsed if math.isfinite(parsed) else 0.0
+
+
+def _string_list(raw: Any, lower: bool = True) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        item = item.strip()
+        if lower:
+            item = item.lower()
+        if item and item not in out:
+            out.append(item)
+    return out
+
+
+def _masked(text: str, excludes: list[str]) -> str:
+    text = str(text or '').lower()
+    # Longest first; use whitespace rather than joining unrelated word fragments.
+    for phrase in sorted(excludes, key=len, reverse=True):
+        text = text.replace(phrase, ' ' * len(phrase))
+    return text
+
+
 def tokenize(text: str) -> list[str]:
     """中文切字符二元组，英文数字切词。
 
@@ -107,11 +144,17 @@ def _stage_or_none(value: Any) -> int | None:
 
 class _Entry:
     __slots__ = ('keywords', 'content', 'max_chars', 'always', 'term_freq', 'length',
-                 'id', 'min_stage', 'max_stage', 'scope', 'topic')
+                 'id', 'min_stage', 'max_stage', 'scope', 'topic',
+                 'weak_keywords', 'excludes', 'links', 'priority')
 
     def __init__(self, keywords, content, max_chars, always,
-                 entry_id='', min_stage=None, max_stage=None, scope='both', topic=False):
+                 entry_id='', min_stage=None, max_stage=None, scope='both', topic=False,
+                  weak_keywords=None, excludes=None, links=None, priority=0.0):
         self.keywords = keywords
+        self.weak_keywords = list(weak_keywords or ())
+        self.excludes = list(excludes or ())
+        self.links = list(links or ())
+        self.priority = _float_or_zero(priority)
         self.content = content
         self.max_chars = max_chars
         self.always = always
@@ -121,7 +164,7 @@ class _Entry:
         self.scope = scope if scope in ('private', 'group') else 'both'
         self.topic = bool(topic)
         # 文档 = 关键词 + 正文。关键词也算进词频，但命中另有显式加成。
-        tokens = tokenize(' '.join(keywords) + ' ' + content)
+        tokens = tokenize(' '.join(keywords + self.weak_keywords) + ' ' + content)
         freq: dict[str, int] = {}
         for token in tokens:
             freq[token] = freq.get(token, 0) + 1
@@ -132,6 +175,8 @@ class _Entry:
 class WorldbookService:
     def __init__(self, path: str):
         self.path = str(path)
+        # Generic addressing only: character/place/NPC names must come from metadata.
+        self._persona_anchors = ('你', '你们那', '你那边', '你的世界')
         self._lock = threading.Lock()
         self.entries: list[dict] = []
         self._docs: list[_Entry] = []
@@ -155,22 +200,27 @@ class WorldbookService:
     def load(self) -> None:
         entries: list[_Entry] = []
         raw_entries: list[dict] = []
+        anchors = ('你', '你们那', '你那边', '你的世界')
         try:
             if os.path.exists(self.path):
                 with open(self.path, 'r', encoding='utf-8') as f:
                     raw = json.load(f)
                 # 兼容两种格式：裸列表，或 {"entries":[...]}
                 if isinstance(raw, dict):
+                    retrieval = raw.get('retrieval')
+                    if isinstance(retrieval, dict) and 'persona_anchors' in retrieval:
+                        anchors = tuple(_string_list(retrieval['persona_anchors']))
                     raw = raw.get('entries') or []
                 if isinstance(raw, list):
                     for item in raw:
                         if not isinstance(item, dict) or not item.get('enabled', True):
                             continue
                         keywords = item.get('keywords') or []
+                        weak_keywords = _string_list(item.get('weak_keywords'))
                         content = str(item.get('content', '')).strip()
                         always = bool(item.get('always'))
                         # 常驻条目允许没有 keywords
-                        if (keywords or always or item.get('topic')) and content:
+                        if (keywords or weak_keywords or always or item.get('topic')) and content:
                             clean_keywords = [
                                 str(k).strip().lower() for k in keywords if str(k).strip()
                             ]
@@ -182,6 +232,10 @@ class WorldbookService:
                                 max_stage=_stage_or_none(item.get('max_stage')),
                                 scope=str(item.get('scope') or 'both').strip().lower(),
                                 topic=bool(item.get('topic')),
+                                weak_keywords=weak_keywords,
+                                excludes=_string_list(item.get('excludes')),
+                                links=_string_list(item.get('links'), lower=False),
+                                priority=item.get('priority', 0),
                             )
                             entries.append(entry)
                             raw_entries.append({
@@ -194,6 +248,10 @@ class WorldbookService:
                                 'max_stage': entry.max_stage,
                                 'scope': entry.scope,
                                 'topic': entry.topic,
+                                'weak_keywords': list(entry.weak_keywords),
+                                'excludes': list(entry.excludes),
+                                'links': list(entry.links),
+                                'priority': entry.priority,
                             })
         except (OSError, UnicodeError, json.JSONDecodeError):
             entries, raw_entries = [], []
@@ -205,6 +263,7 @@ class WorldbookService:
             self._idf = idf
             self._avg_len = avg_len
             self._default_idf = default_idf
+            self._persona_anchors = anchors
 
     @staticmethod
     def _build_idf(entries: list[_Entry]) -> tuple[dict[str, float], float, float]:
@@ -282,56 +341,105 @@ class WorldbookService:
     def lookup(self, text: str, recent: list[str] | None = None,
                max_entries: int = 3,
                max_chars_per_entry: int = DEFAULT_MAX_CHARS_PER_ENTRY,
-               stage: int | None = None, scope: str = 'both') -> list[str]:
-        """返回和消息相关的世界书内容；都不相关时返回空列表（零成本）。
+               stage: int | None = None, scope: str = 'both',
+               max_total_chars: int | None = None) -> list[str]:
+        """检索正文；未填写扩展元数据时与旧版排序/选取保持一致。
 
-        recent 是最近几条消息（可选）：群聊里「那她后来呢？」这种追问本身不含关键词，
-        但前文含——把它们按低权重并进查询，能把这部分捞回来。
+        weak_keywords/excludes/links/priority均为显式opt-in。总预算None或0沿用旧行为；
+        正整数为本轮正文（含截断省略号）硬上限，不影响always和topic独立入口。
+        一跳关联只补位，不递归扩张，不绕过可见性。
         """
         with self._lock:
             docs = list(self._docs)
-        if not docs:
+            anchors = tuple(self._persona_anchors)
+        count = _positive_int(max_entries)
+        if not docs or not count:
             return []
-
         current = str(text or '')
-        # 前文只作辅助：权重压低，避免前文的话题把当前问题盖掉
+        history = list(recent or ())[-5:]
         query_tokens = tokenize(current)
-        if recent:
-            context_tokens: list[str] = []
-            for line in list(recent)[-5:]:
+        if history:
+            context_tokens = []
+            for line in history:
                 context_tokens.extend(tokenize(line))
             query_tokens = query_tokens * 3 + context_tokens
         if not query_tokens:
             return []
 
-        lowered = current.lower()
-        scored: list[tuple[float, int, _Entry]] = []
+        scored = []
+        # Exclusion must apply to every route (keyword, BM25 and links), not only keywords.
+        eligible = {}
         for index, entry in enumerate(docs):
-            if entry.always or entry.topic:
-                continue          # 常驻条目走 always_entries，谈资走 topics，都不参与检索
-            if not self._visible(entry, stage, scope):
-                continue          # 阶段/场景不符：根本不进候选（深层设定的保密靠这里）
-            hit = any(kw in lowered for kw in entry.keywords if kw)
-            score = self._bm25(query_tokens, entry)
-            if hit:
+            if entry.always or entry.topic or not self._visible(entry, stage, scope):
+                continue
+            lowered = _masked(current, entry.excludes)
+            tokens = query_tokens
+            if entry.excludes:
+                tokens = tokenize(lowered)
+                if history:
+                    context_tokens = []
+                    for line in history:
+                        context_tokens.extend(tokenize(_masked(line, entry.excludes)))
+                    tokens = tokens * 3 + context_tokens
+                if not tokens:
+                    continue
+            eligible[entry.id] = (index, entry)
+            strong_hit = any(kw in lowered for kw in entry.keywords if kw)
+            weak_hits = [kw for kw in entry.weak_keywords if kw in lowered]
+            anchored = any(anchor in lowered for anchor in anchors)
+            weak_hit = bool(weak_hits and (anchored or len(weak_hits) >= 2))
+            # Explicitly declared weak words cannot sneak through BM25 on the same query.
+            if not strong_hit and entry.weak_keywords and not weak_hit:
+                if weak_hits or not entry.keywords:
+                    continue
+            score = self._bm25(tokens, entry)
+            if strong_hit or weak_hit:
                 score += KEYWORD_BONUS
             else:
-                # 没命中关键词：必须过覆盖率闸门，挡住「这个样子」这类虚词巧合
-                matched, coverage = self._coverage(query_tokens, entry)
+                matched, coverage = self._coverage(tokens, entry)
                 if matched < MIN_MATCHED_TERMS or coverage < MIN_COVERAGE:
                     continue
             if score <= 0:
                 continue
-            scored.append((score, -index, entry))
-
-        # 分数高的在前；同分时保持文件顺序（-index 让小的 index 排前面）
+            scored.append((score + entry.priority, -index, entry))
         scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
 
+        # Candidates supplied only by links always follow the original directly ranked list.
+        # Never use a hidden source or target. Ignore duplicate and dangling IDs safely.
+        ranked = list(scored)
+        known = {entry.id for _, _, entry in scored}
+        linked = []
+        for _, _, parent in scored[:count]:
+            for position, linked_id in enumerate(parent.links):
+                if linked_id in known or linked_id not in eligible:
+                    continue
+                index, target = eligible[linked_id]
+                if target.excludes and any(word in current.lower() for word in target.excludes):
+                    continue
+                known.add(linked_id)
+                linked.append((target.priority, -position, -index, target))
+        linked.sort(key=lambda row: row[:3], reverse=True)
+        ranked.extend((0.0, index, entry) for _, _, index, entry in linked)
+
+        budget = _positive_int(max_total_chars)
         hits = []
-        for _score, _order, entry in scored[:max_entries]:
+        used = 0
+        for _, _, entry in ranked:
+            if len(hits) >= count:
+                break
             limit = entry.max_chars or max_chars_per_entry
             content = entry.content
             if limit and len(content) > limit:
                 content = content[:limit] + '…'
+            if budget:
+                remaining = budget - used
+                if remaining <= 0:
+                    break
+                if len(content) > remaining:
+                    # Preserve complete entries when one already fitted; only the first may trim.
+                    if hits:
+                        continue
+                    content = content[:max(0, remaining - 1)] + '…'
+            used += len(content)
             hits.append(content)
         return hits
